@@ -1,0 +1,98 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* "Schreibtisch" — warmes Papier, Tinte, Haarlinien */
+  --paper: #faf9f6;
+  --surface: #ffffff;
+  --ink: #1a1917;
+  --muted: #6f6a61;
+  --hairline: #e8e5df;
+  --tinte: #2440b3;
+  --unread: #b45309;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'Instrument Sans Variable', system-ui, sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--tinte);
+  outline-offset: 1px;
+}
+
+::selection {
+  background: rgba(36, 64, 179, 0.14);
+}
+
+/* Gestaffeltes Einblenden der Listenzeilen (animation-delay per Index, gedeckelt bei ~15) */
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.row-enter {
+  animation: row-in 260ms ease both;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.fade-in {
+  animation: fade-in 180ms ease both;
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.slide-in-right {
+  animation: slide-in-right 180ms ease both;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner {
+  animation: spin 700ms linear infinite;
+}
+
+/* Dezente Scrollbars auf Papier */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--hairline) transparent;
+}

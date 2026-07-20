@@ -1,0 +1,71 @@
+# Postfach API-Vertrag v0.1 (EINGEFROREN — beide Seiten bauen exakt dagegen)
+
+Base-URL: gleiche Origin (`/api/...`). Alle Antworten JSON (außer Attachment-Download).
+Fehler: `{"detail": "<menschenlesbare Meldung>"}` mit Status 4xx/5xx; Konto nicht erreichbar → **502**.
+
+## Typen
+
+```ts
+type Account = { name: string; address: string; provider: "imap" | "gmail" };
+
+type Summary = {
+  account: string; folder: string; uid: number;
+  subject: string; from_name: string; from_addr: string;
+  date: string;              // ISO 8601, z. B. "2026-07-19T10:23:00+02:00"
+  snippet: string;           // erste ~120 Zeichen Klartext
+  seen: boolean; has_attachments: boolean;
+  category: string | null;   // z. B. "Newsletter", "Rechnungen" … oder null = unklassifiziert
+};
+
+type Attachment = { index: number; filename: string; content_type: string; size: number };
+
+type Detail = Summary & {
+  to: string[]; cc: string[]; reply_to: string | null; message_id: string;
+  body_text: string;
+  body_html: string | null;         // sanitisiert, Remote-Bilder BLOCKIERT (src/srcset komplett entfernt)
+  body_html_images: string | null;  // sanitisiert, Remote-Bilder erlaubt (für "Bilder laden")
+  attachments: Attachment[];
+};
+
+type Classification = {
+  category: string; is_newsletter: boolean; interesting: boolean;
+  needs_reply: boolean; reason: string;
+};
+```
+
+## Endpunkte
+
+| Methode & Pfad | Request | Response |
+|---|---|---|
+| `GET /api/accounts` | — | `Account[]` |
+| `GET /api/folders?account=` | — | `string[]` |
+| `GET /api/messages?account=&folder=INBOX&limit=50` | — | `Summary[]` (neueste zuerst) |
+| `GET /api/messages/{account}/{uid}?folder=INBOX` | — | `Detail` |
+| `GET /api/messages/{account}/{uid}/attachments/{index}?folder=INBOX` | — | Binärstream mit Content-Disposition |
+| `POST /api/messages/{account}/{uid}/action` | `{"action":"archive"\|"trash"\|"read"\|"unread"\|"label","label"?:string,"folder":"INBOX"}` | `{"ok":true}` |
+| `POST /api/classify` | `{"account":string,"folder":string,"uids":number[]}` | `{"<uid>": Classification, …}` |
+| `POST /api/draft` | `{"account":string,"folder":string,"uid":number}` | `{"text":string}` |
+| `POST /api/send` | `{"account":string,"to":string[],"cc":string[],"subject":string,"body":string,"reply_to_uid"?:number,"folder"?:string}` | `{"ok":true, "warning"?:string}` — warning: SMTP ok, aber Gesendet-Ablage fehlgeschlagen (Mail NICHT erneut senden) |
+| `GET /api/search?account=&q=&folder=INBOX` | — | `Summary[]` |
+
+## Verhaltensregeln
+
+- Kategorien-Vokabular = email-agent-Taxonomie: `Newsletter, Newsletter-Interessant, Aktion-nötig, Rechnungen, Bestellungen, Entwicklung, Verein, Termine, Werbung, Sonstiges` (+ evtl. eigene aus config). Frontend behandelt die Liste dynamisch (aus tatsächlich gelieferten Kategorien), hardcodet aber die Chip-Farben für die bekannten zehn.
+- `classify` ist idempotent & gecacht: bereits klassifizierte uids kommen aus dem Cache, kosten nichts.
+- `archive` verschiebt in `AI/<category>`-Ordner falls klassifiziert, sonst in „Archive"-Ordner des Servers.
+- `send` mit `reply_to_uid` setzt automatisch `Re:`-Betreff-Fallback und Threading-Header serverseitig; `to` ist im Reply vorbefüllt vom Frontend (Reply-To bzw. From der Originalmail).
+- Demo-Modus (`POSTFACH_DEMO=1`): identischer Vertrag, In-Memory-Daten, `send` legt in „Gesendet" ab.
+- Öffnen einer Mail markiert sie NICHT automatisch als gelesen — das Frontend sendet explizit `action:"read"` beim Öffnen (damit ist das Verhalten testbar und später abschaltbar).
+
+## Nachtrag v0.2 — Emilia (eingefroren 2026-07-20)
+
+| Methode & Pfad | Request | Response |
+|---|---|---|
+| `POST /api/emilia/chat` | `{"account":string,"message":string,"folder"?:string,"uid"?:number}` | `{"reply":string,"sources":[{account,folder,uid,subject,from_name,date}]}` |
+| `POST /api/emilia/improve` | `{"text":string,"mode":"korrigieren"\|"verbessern"}` | `{"text":string}` |
+| `POST /api/emilia/index` | `{"account":string}` | `{"indexed":number}` |
+| `GET /api/emilia/status` | — | `{"model":string,"embed_model":string,"indexed_mails":number,"sort_local":boolean}` |
+
+Verhalten: `chat` antwortet deutsch, `sources` = die tatsächlich verwendeten Gedächtnis-Treffer
+(kann leer sein); `uid`/`folder` geben der Frage den Kontext der geöffneten Mail. `improve`
+gibt NUR den überarbeiteten Text zurück. `index` ist idempotent (aktualisiert Bestand).

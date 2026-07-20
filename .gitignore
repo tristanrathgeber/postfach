@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+data/
+config/config.yaml
+config/style_profile.md
+node_modules/
+frontend/dist/
+.DS_Store
+dist/

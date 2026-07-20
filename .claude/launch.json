@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "postfach-demo",
+      "runtimeExecutable": "env",
+      "runtimeArgs": ["POSTFACH_DEMO=1", "uv", "run", "--project", "backend", "postfach"],
+      "port": 8722
+    }
+  ]
+}
