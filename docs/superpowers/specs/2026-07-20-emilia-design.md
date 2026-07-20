@@ -17,7 +17,6 @@ Mail-Inhalte verlassen für Emilia-Funktionen nie den Rechner.
 | **Mail-Gedächtnis (RAG)** | Indexer holt alle Mails der Hauptordner (read-only), speichert Metadaten + Text-Snippet + Embedding in `data/memory.db` (SQLite). Frage → Embedding → Cosine-Top-K → llama3.2 antwortet auf Deutsch **mit Quellen** (klickbare Mail-Chips im Panel). |
 | **Chat-Panel** | Rechte Seitenleiste („Emilia", ⌘J), Chat-Verlauf sessionlokal, Kontext der geöffneten Mail wird mitgegeben. |
 | **Verbessern/Korrigieren** | Zwei Buttons im Composer → `/api/emilia/improve` (Modus `korrigieren` = nur Fehler, `verbessern` = Stil + Fehler). Ergebnis ersetzt den Text; Original per Rückgängig-Toast. |
-| **Diktieren** | v2 (dokumentiert): Browser-Speech-API wäre nicht lokal (Google-Server); saubere Lösung = Whisper lokal, braucht Modell-Download → nur nach Freigabe. |
 
 ## Sicherheitsmodell (unverändert hart)
 

@@ -21,8 +21,8 @@ Wunsch komplett lokal. ⌘J öffnet sie.
 ## Installation (öffentliches Repo)
 
 Voraussetzungen: macOS, [uv](https://docs.astral.sh/uv/), Node.js ≥ 20.
-Optional: [Ollama](https://ollama.com) (`ollama pull llama3.2 && ollama pull all-minilm:l6-v2`)
-für Emilia, [Claude Code CLI](https://claude.com/claude-code) für Cloud-Entwürfe.
+Optional: [Ollama](https://ollama.com) für Emilia — empfohlen `ollama pull qwen3:8b`
+(oder kleiner: `llama3.2`), dazu `ollama pull all-minilm:l6-v2` fürs Gedächtnis; [Claude Code CLI](https://claude.com/claude-code) für Cloud-Entwürfe.
 
 ```bash
 # Beide Repos NEBENEINANDER klonen (postfach nutzt email-agent als Path-Dependency):
@@ -62,6 +62,12 @@ POSTFACH_DEMO=1 uv run --project backend postfach
    ```
 2. Passwörter in `.env`: `MAIL_PRIVAT_PASSWORD=…`
 3. Optional `config/style_profile.md` vom email-agent kopieren (AI-Entwürfe in deinem Stil).
+   Emilia-Modell wählen (Abschnitt `emilia:` in der config):
+   ```yaml
+   emilia:
+     model: qwen3:8b          # lokales Modell für Chat/Korrigieren (llama3.2 = kleiner/schwächer)
+     sort_local: true         # Klassifikation lokal statt Claude
+   ```
 4. Starten: `uv run --project backend postfach`
 
 ## Entwicklung
