@@ -16,6 +16,7 @@ from .demo import DemoEmiliaLLM, DemoMailbox
 from .emilia import EmiliaService
 from .mail_imap import Mailbox
 from .memory import FakeEmbedder, MailMemory, OllamaEmbedder
+from .watcher import LiveState, start_watcher_thread
 
 HOST = "127.0.0.1"
 PORT = 8722
@@ -45,9 +46,10 @@ def create_app(root: Path | None = None, demo: bool | None = None, mailbox_facto
     data_dir = root / "data"
     style_path = root / "config" / "style_profile.md"
 
-    app = FastAPI(title="Postfach", version="0.1.0")
+    app = FastAPI(title="Postfach", version="0.2.0")
     app.state.config = cfg
     app.state.demo = demo
+    app.state.live = LiveState()
 
     if demo:
         app.state.accounts = {_DEMO_ACCOUNT.name: _DEMO_ACCOUNT}
@@ -113,6 +115,31 @@ def create_app(root: Path | None = None, demo: bool | None = None, mailbox_facto
             send_mail(account, password, mime_bytes)
 
         app.state.smtp_send = smtp_send
+
+        # Live-Push: IDLE-Watcher nur im echten Betrieb mit Default-Factory
+        # (Tests injizieren mailbox_factory und bekommen keine Netz-Threads).
+        if mailbox_factory is None:
+            from imapclient import IMAPClient
+
+            def _index_new_mail(account_name: str) -> None:
+                # Neue Mails direkt in Emilias Gedächtnis aufnehmen (Best Effort).
+                account = app.state.accounts[account_name]
+                with open_mailbox(account) as box:
+                    app.state.emilia.index_folder(account_name, box, "INBOX", limit=10)
+
+            def _watch_connect_for(account: MailAccount):
+                def connect():
+                    password = os.environ.get(account.password_env, "").strip()
+                    client = IMAPClient(account.imap_host, port=account.imap_port, ssl=True)
+                    client.login(account.address, password)
+                    return client
+
+                return connect
+
+            for account in cfg.accounts:
+                start_watcher_thread(
+                    account.name, _watch_connect_for(account), app.state.live, _index_new_mail
+                )
 
     app.include_router(router, prefix="/api")
 

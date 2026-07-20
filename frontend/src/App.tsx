@@ -6,6 +6,7 @@ import { sortCategories } from './lib/categories'
 import { viewFolder, viewKey, viewTitle, type View } from './lib/view'
 import { createSequenceTracker, isEditableTarget, useGlobalKeydown } from './lib/keyboard'
 import { ALL_ACCOUNTS, useAccounts, useFolders, useMessagesAggregate, useSearchAggregate } from './hooks/useMailData'
+import { useLiveEvents } from './hooks/useLiveEvents'
 import { useMailActions } from './hooks/useMailActions'
 import { AppShell } from './components/AppShell'
 import { Sidebar } from './components/Sidebar'
@@ -19,7 +20,9 @@ import { ToastProvider, useToast } from './components/Toast'
 
 const queryClient = new QueryClient({
   defaultOptions: {
-    queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 30_000 },
+    // Fallback-Netz unter dem SSE-Push: beim Fokuswechsel und alle 3 Minuten
+    // leise nachladen, falls ein Live-Event verloren ging.
+    queries: { retry: 1, refetchOnWindowFocus: true, refetchInterval: 180_000, staleTime: 30_000 },
   },
 })
 
@@ -364,6 +367,17 @@ function Postfach() {
     setSelectedKey(msgKey(ref))
     setOpened(ref)
   }, [])
+
+  // --- Live-Push: neue Mail → Liste sofort aktualisieren ---
+  const onNewMail = useCallback(
+    (account: string) => {
+      qc.invalidateQueries({ queryKey: ['messages', account, 'INBOX'] })
+      qc.invalidateQueries({ queryKey: ['emilia-status'] })
+      showToast('Neue Mail eingetroffen.')
+    },
+    [qc, showToast],
+  )
+  useLiveEvents(onNewMail)
 
   return (
     <>

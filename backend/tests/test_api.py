@@ -184,6 +184,15 @@ def test_emilia_improve(client):
     ).status_code == 422
 
 
+def test_events_stream_responds_and_emits_on_bump(client):
+    client.app.state.live.bump("demo")
+    with client.stream("GET", "/api/events", params={"once": 1}) as response:
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        body = b"".join(response.iter_bytes())
+    assert b": verbunden" in body
+
+
 def test_unknown_uid_404_and_unknown_account_404(client):
     assert client.get("/api/messages/demo/9999", params={"folder": "INBOX"}).status_code == 404
     assert client.get("/api/messages", params={"account": "nope", "folder": "INBOX"}).status_code == 404

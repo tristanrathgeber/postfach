@@ -45,23 +45,26 @@ class EmiliaService:
 
     # --- Gedächtnis ---
 
+    def index_folder(self, account: str, mailbox, folder: str, limit: int = 10000) -> int:
+        mails = mailbox.list_messages(folder, limit)
+        entries = [
+            {
+                "account": account, "folder": folder, "uid": m.uid,
+                "subject": m.subject, "from_name": m.from_name, "from_addr": m.from_addr,
+                "date": m.date_iso, "snippet": m.body_text[:800],
+            }
+            for m in mails
+        ]
+        self._memory.upsert_many(entries)
+        return len(entries)
+
     def index(self, account: str, mailbox) -> int:
         total = 0
         for folder in mailbox.list_folders():
             leaf = folder.split("/")[-1].split(".")[-1].lower()
             if folder.lower() in _INDEX_SKIP or leaf in _INDEX_SKIP:
                 continue
-            mails = mailbox.list_messages(folder, 10000)
-            entries = [
-                {
-                    "account": account, "folder": folder, "uid": m.uid,
-                    "subject": m.subject, "from_name": m.from_name, "from_addr": m.from_addr,
-                    "date": m.date_iso, "snippet": m.body_text[:800],
-                }
-                for m in mails
-            ]
-            self._memory.upsert_many(entries)
-            total += len(entries)
+            total += self.index_folder(account, mailbox, folder)
         return total
 
     # --- Fähigkeiten ---

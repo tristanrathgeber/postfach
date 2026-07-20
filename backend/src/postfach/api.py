@@ -314,6 +314,44 @@ def emilia_status(request: Request):
     }
 
 
+# --- Live-Push (SSE): meldet der App neue Mails aus dem IDLE-Watcher ---
+
+
+@router.get("/events")
+async def events(request: Request, once: int = 0):
+    import asyncio
+    import json as jsonlib
+
+    from fastapi.responses import StreamingResponse
+
+    state = request.app.state.live
+
+    async def stream():
+        yield ": verbunden\n\n"
+        last = state.snapshot()
+        ticks = 0
+        while True:
+            if once and ticks > 0:
+                return
+            if await request.is_disconnected():
+                return
+            await asyncio.sleep(0 if once else 2)
+            ticks += 1
+            now = state.snapshot()
+            for account, version in now.items():
+                if version != last.get(account, 0):
+                    yield f"data: {jsonlib.dumps({'type': 'new_mail', 'account': account})}\n\n"
+            last = now
+            if ticks % 12 == 0:
+                yield ": ping\n\n"  # Keepalive gegen Proxy-/Idle-Timeouts
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @router.get("/search")
 @_mailbox_errors
 def search(request: Request, account: str, q: str, folder: str = "INBOX"):
