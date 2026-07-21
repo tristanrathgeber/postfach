@@ -189,7 +189,10 @@ def test_amount_regex_no_pathological_stall():
     pathological = "1" + ".234" * 5000
     start = time.perf_counter()
     extract_entities(pathological)
-    assert time.perf_counter() - start < 0.3
+    # Großzügige Schranke: die lineare Variante braucht Sekundenbruchteile (auch
+    # auf lahmen CI-Runnern), katastrophales Backtracking dagegen viele Sekunden.
+    # Kein Mikro-Benchmark — nur der O(n²)-Blowup soll auffliegen.
+    assert time.perf_counter() - start < 2.0
     # Gültige Beträge weiterhin erkannt
     ents = extract_entities("Summe 1.234,56 € und 9,99 €")
     assert len([e for e in ents if e["kind"] == "amount"]) == 2
