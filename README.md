@@ -10,6 +10,9 @@ default **no cloud** — the AI runs entirely on your machine via Ollama.
 chips), rewrite drafts in your own tone, search in plain German, summarize long
 threads — all offline. Press ⌘J to open her.
 
+📖 **User manual:** [**docs/HANDBUCH.md**](docs/HANDBUCH.md) — every function
+explained, from first steps to every keyboard shortcut (German, matching the UI).
+
 ## Privacy — verifiable, not just promised
 
 Postfach makes **no network connection you didn't ask for.** There is no
@@ -47,8 +50,11 @@ A fresh install starts with no accounts — add yours in the window ("+ Konto
 hinzufügen"): pick your provider, the server settings fill in, the password goes
 straight to the Keychain. No YAML editing.
 
-For Emilia, install [Ollama](https://ollama.com) and pull a model:
-`ollama pull qwen3:8b` (chat) and `ollama pull all-minilm:l6-v2` (memory).
+For Emilia, install [Ollama](https://ollama.com). You don't have to pick a model
+by hand: open the **Model Assistant** (⌘K → "Modell-Assistent"), which scans your
+Mac, recommends the model that best fits Postfach *and* runs on your RAM, and
+downloads + activates it in one click. (Manual route: `ollama pull qwen2.5:7b` for
+chat/sorting and `ollama pull all-minilm:l6-v2` for Emilia's memory.)
 
 ## Build from source
 
