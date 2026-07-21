@@ -6,6 +6,8 @@ export type View =
   | { kind: 'drafts' }
   | { kind: 'outbox' }
   | { kind: 'reminders' }
+  | { kind: 'subscriptions' }
+  | { kind: 'screener' }
   | { kind: 'category'; category: string }
   | { kind: 'folder'; folder: string }
   | { kind: 'search'; query: string; folder: string }
@@ -22,6 +24,10 @@ export function viewTitle(view: View): string {
       return 'Ausgang'
     case 'reminders':
       return 'Wiedervorlage'
+    case 'subscriptions':
+      return 'Abos'
+    case 'screener':
+      return 'Screener'
     case 'category':
       return view.category
     case 'folder':

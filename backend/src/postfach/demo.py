@@ -21,13 +21,13 @@ _NEWSLETTER_HTML = (
 )
 
 
-def _mail(uid, subject, from_name, from_addr, body, *, seen=True, html=None, headers=None, attachments=(), references="", date_iso=None):
+def _mail(uid, subject, from_name, from_addr, body, *, seen=True, html=None, headers=None, attachments=(), references="", date_iso=None, to=("alex@demo.example",)):
     return ParsedMail(
         uid=uid,
         subject=subject,
         from_name=from_name,
         from_addr=from_addr,
-        to=("alex@demo.example",),
+        to=tuple(to),
         cc=(),
         reply_to=None,
         message_id=f"<demo-{uid}@demo.example>",
@@ -49,7 +49,8 @@ def _sample_inbox() -> list[ParsedMail]:
               "PETG-CF im Härtetest, neue Slicer-Profile, Bambu-Firmware.", seen=False, html=_NEWSLETTER_HTML,
               headers={"list-unsubscribe": "<https://3dprintweekly.example/unsub>"}),
         _mail(111, "Ihr Style-Update: Sommertrends 2026", "ModeHaus", "news@modehaus.example",
-              "20 % auf alles! Die neuen Sommertrends sind da.", headers={"list-unsubscribe": "<https://modehaus.example/u>"}),
+              "20 % auf alles! Die neuen Sommertrends sind da.",
+              headers={"list-unsubscribe": "<https://modehaus.example/abmelden>"}),
         _mail(110, "Training am Samstag?", "Martin Becker", "m.becker@web.example",
               "Hi Alex, kannst du am Samstag die Trainingsgruppe übernehmen? Ich bin im Urlaub. VG Martin", seen=False),
         _mail(109, "Ihre Telekom Rechnung Juli 2026", "Telekom", "rechnung@telekom.example",
@@ -64,7 +65,8 @@ def _sample_inbox() -> list[ParsedMail]:
         _mail(105, "Terminbestätigung: Prophylaxe am 24.07., 14:30", "Zahnarztpraxis Dr. Weber", "praxis@drweber.example",
               "Wir bestätigen Ihren Termin am 24.07.2026 um 14:30 Uhr."),
         _mail(104, "Nur heute: 30 % auf Elektronik", "TechDeals", "sale@techdeals.example",
-              "Blitzangebote! 30 % Rabatt auf Netzteile, Sensoren, Mikrocontroller."),
+              "Blitzangebote! 30 % Rabatt auf Netzteile, Sensoren, Mikrocontroller.",
+              headers={"list-unsubscribe": "<mailto:abmelden@techdeals.example?subject=unsubscribe>"}),
         _mail(103, "Rückfrage zur EÜR 2025", "StB Kanzlei Sommer", "kanzlei@sommer-stb.example",
               "Guten Tag, für den Abschluss fehlt uns noch der Beleg zur Abschreibung des Druckers. "
               "Können Sie ihn uns bis Freitag senden?", seen=False),
@@ -81,9 +83,16 @@ class DemoMailbox:
         self._folders: dict[str, list[ParsedMail]] = {
             "INBOX": _sample_inbox(),
             "Gesendet": [
+                # Echte Empfänger: der Screener leitet „bekannt" aus den
+                # Gesendet-Empfängern ab — Martin & Co. sind keine Erstkontakte.
                 _mail(11, "Re: Vereinsheim Schlüssel", "Alex", "alex@demo.example",
                       "Hi Martin,\n\nklar, ich bringe den Schlüssel mit.\n\nViele Grüße\nAlex",
-                      references="<demo-114@demo.example>", date_iso="2026-07-19T10:30:00+02:00"),
+                      references="<demo-114@demo.example>", date_iso="2026-07-19T10:30:00+02:00",
+                      to=("m.becker@web.example",)),
+                _mail(10, "Beleg Abschreibung Drucker", "Alex", "alex@demo.example",
+                      "Guten Tag, anbei der Beleg zur Abschreibung.\n\nViele Grüße\nAlex Demo",
+                      date_iso="2026-07-15T09:00:00+02:00",
+                      to=("kanzlei@sommer-stb.example",)),
             ],
             "Papierkorb": [],
             "Archive": [],

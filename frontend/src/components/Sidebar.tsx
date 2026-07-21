@@ -20,6 +20,8 @@ type SidebarProps = {
   outboxCount: number
   remindersCount: number
   remindersDue: number
+  subscriptionsCount: number
+  screenerCount: number
   folders: string[]
   /** Watcher-Verbindungsstatus je Konto (leer, solange kein Watcher läuft — z. B. Demo). */
   status: Record<string, AccountStatus>
@@ -161,6 +163,8 @@ export function Sidebar({
   outboxCount,
   remindersCount,
   remindersDue,
+  subscriptionsCount,
+  screenerCount,
   folders,
   status,
   onOpenSettings,
@@ -256,6 +260,20 @@ export function Sidebar({
             onClick={() => onSelectView({ kind: 'reminders' })}
           />
         ) : null}
+
+        <p className="px-2 pb-1 pt-3 font-mono text-[9.5px] uppercase tracking-[0.1em] text-muted">Hygiene</p>
+        <NavRow
+          label="Abos"
+          count={subscriptionsCount}
+          active={sameView(view, { kind: 'subscriptions' })}
+          onClick={() => onSelectView({ kind: 'subscriptions' })}
+        />
+        <NavRow
+          label="Screener"
+          count={screenerCount}
+          active={sameView(view, { kind: 'screener' })}
+          onClick={() => onSelectView({ kind: 'screener' })}
+        />
 
         {categories.length > 0 ? (
           <>

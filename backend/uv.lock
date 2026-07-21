@@ -278,6 +278,7 @@ source = { editable = "." }
 dependencies = [
     { name = "email-agent" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "imapclient" },
     { name = "nh3" },
     { name = "python-multipart" },
@@ -300,6 +301,7 @@ dev = [
 requires-dist = [
     { name = "email-agent", editable = "../../email-agent" },
     { name = "fastapi", specifier = ">=0.115" },
+    { name = "httpx", specifier = ">=0.27" },
     { name = "imapclient", specifier = ">=3.0" },
     { name = "nh3", specifier = ">=0.2" },
     { name = "python-multipart", specifier = ">=0.0.32" },

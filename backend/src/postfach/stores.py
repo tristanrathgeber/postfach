@@ -133,3 +133,57 @@ class SnippetStore(_JsonFile):
         ]
         with self._lock:
             self._write(cleaned)
+
+
+class SubscriptionStore(_JsonFile):
+    """Erfolgte Abmeldungen: {account: {addr: {unsubscribed_at, method}}} —
+    graut Abos in der Liste aus und verhindert Doppel-Abmeldungen."""
+
+    def __init__(self, path: Path) -> None:
+        super().__init__(path, {})
+
+    def get(self, account: str) -> dict:
+        with self._lock:
+            return self._read().get(account, {})
+
+    def mark(self, account: str, addr: str, method: str) -> None:
+        addr = addr.strip().lower()
+        with self._lock:
+            data = self._read()
+            data.setdefault(account, {})[addr] = {
+                "unsubscribed_at": datetime.now().isoformat(timespec="seconds"),
+                "method": method,
+            }
+            self._write(data)
+
+
+class ScreenerStore(_JsonFile):
+    """Screener-Entscheidungen: {account: {addr: {decision, decided_at}}}.
+    `block` ist eine explizite NUTZER-Regel — der Watcher sortiert künftige
+    Mails dieses Absenders nach „Aussortiert" (niemals Papierkorb)."""
+
+    def __init__(self, path: Path) -> None:
+        super().__init__(path, {})
+
+    def decided(self, account: str) -> dict:
+        with self._lock:
+            return self._read().get(account, {})
+
+    def status(self, account: str, addr: str) -> str | None:
+        entry = self.decided(account).get(addr.strip().lower())
+        return entry["decision"] if entry else None
+
+    def blocked(self, account: str) -> set[str]:
+        return {a for a, e in self.decided(account).items() if e["decision"] == "block"}
+
+    def decide(self, account: str, addr: str, decision: str) -> None:
+        if decision not in ("allow", "block"):
+            raise ValueError(f"Unbekannte Entscheidung: {decision!r}")
+        addr = addr.strip().lower()
+        with self._lock:
+            data = self._read()
+            data.setdefault(account, {})[addr] = {
+                "decision": decision,
+                "decided_at": datetime.now().isoformat(timespec="seconds"),
+            }
+            self._write(data)

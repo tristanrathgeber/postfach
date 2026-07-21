@@ -58,3 +58,31 @@ export function useRemindersAggregate(accountNames: string[]) {
     },
   })
 }
+
+/** Abo-Liste aller Konten — Einträge tragen ihr Konto (für die Abmelde-Aktion). */
+export function useSubscriptionsAggregate(accountNames: string[]) {
+  return useQueries({
+    queries: accountNames.map((name) => ({
+      queryKey: ['subscriptions', name],
+      queryFn: async () => (await api.subscriptions(name)).map((s) => ({ ...s, account: name })),
+      refetchInterval: 60_000,
+    })),
+    combine: (results) => ({
+      entries: results.flatMap((r) => r.data ?? []).sort((a, b) => b.per_month - a.per_month),
+    }),
+  })
+}
+
+/** Screener-Erstkontakte aller Konten. */
+export function useScreenerAggregate(accountNames: string[]) {
+  return useQueries({
+    queries: accountNames.map((name) => ({
+      queryKey: ['screener', name],
+      queryFn: async () => (await api.screener(name)).map((s) => ({ ...s, account: name })),
+      refetchInterval: 60_000,
+    })),
+    combine: (results) => ({
+      entries: results.flatMap((r) => r.data ?? []).sort((a, b) => b.last_date.localeCompare(a.last_date)),
+    }),
+  })
+}

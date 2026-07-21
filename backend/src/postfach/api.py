@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import functools
 import json
+import logging
 import re
 
 from typing import Literal
@@ -25,6 +26,8 @@ from .config import MailAccount
 from .mail_imap import ParsedMail
 from .search import thread_root_for
 from .sanitize import sanitize_mail_html
+
+log = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -825,3 +828,104 @@ def search_status(request: Request, account: str):
     _account(request, account)
     index = request.app.state.search
     return {"indexed": index.count(account), "ready": index.is_ready(account)}
+
+
+# --- Posteingangs-Hygiene: Abo-Manager + Screener (Contract v0.8) ---
+
+
+class UnsubscribeBody(BaseModel):
+    account: str
+    addr: str
+
+
+class ScreenerDecideBody(BaseModel):
+    account: str
+    addr: str
+    decision: str  # "allow" | "block"
+
+
+@router.get("/subscriptions")
+def subscriptions(request: Request, account: str):
+    _account(request, account)
+    state = request.app.state
+    done = state.subscriptions.get(account)
+    subs = state.search.subscriptions(account)
+    for s in subs:
+        info = done.get(s["addr"])
+        s["unsubscribed_at"] = info["unsubscribed_at"] if info else None
+    return subs
+
+
+@router.post("/subscriptions/unsubscribe")
+@_mailbox_errors
+def subscriptions_unsubscribe(request: Request, body: UnsubscribeBody):
+    """Explizite UI-Aktion (Zweitklick-Bestätigung im Frontend). Strategie:
+    RFC-8058-One-Click-POST → mailto-Send → sonst Link für den Browser."""
+    from .unsubscribe import one_click_post, parse_list_unsubscribe
+
+    _account(request, body.account)
+    state = request.app.state
+    addr = body.addr.strip().lower()
+    if addr in state.subscriptions.get(body.account):
+        raise HTTPException(409, "Bereits abgemeldet")
+    header = state.search.unsubscribe_header(body.account, addr)
+    if header is None:
+        raise HTTPException(404, "Kein List-Unsubscribe-Header für diesen Absender")
+    target = parse_list_unsubscribe(*header)
+
+    if target.one_click:
+        try:
+            one_click_post(target.https)
+            state.subscriptions.mark(body.account, addr, "oneclick")
+            return {"ok": True, "method": "oneclick"}
+        except Exception:
+            log.exception("One-Click-Abmeldung fehlgeschlagen (%s)", addr)
+            # Weiter zur nächsten Strategie — mailto oder Link.
+    if target.mailto and "@" in target.mailto:
+        send_body = SendBody(
+            account=body.account,
+            to=[target.mailto],
+            subject=target.mailto_subject or "unsubscribe",
+            body="Bitte diese Adresse aus dem Verteiler entfernen.",
+        )
+        perform_send(state, send_body, [])
+        state.subscriptions.mark(body.account, addr, "mailto")
+        return {"ok": True, "method": "mailto"}
+    if target.https:
+        return {"ok": False, "method": "link", "link": target.https}
+    raise HTTPException(422, "Kein nutzbarer Abmelde-Mechanismus im Header")
+
+
+def _screener_suggestion(entry: dict) -> tuple[str, str]:
+    """Ehrlich regelbasierte Heuristik — kein LLM-Call, keine Magie."""
+    from .memory import NOREPLY_RE
+
+    if entry["has_unsubscribe"]:
+        return "block", "Newsletter/Verteiler — Mail trägt einen Abmelde-Header."
+    if NOREPLY_RE.match(entry["addr"]):
+        return "block", "Automatischer Absender — auf diese Adresse antwortet niemand."
+    return "allow", "Sieht nach einer persönlichen Mail aus."
+
+
+@router.get("/screener")
+def screener(request: Request, account: str):
+    acc = _account(request, account)
+    state = request.app.state
+    decided = state.screener.decided(account)
+    own = [acc.address.lower()]
+    pending = [
+        p for p in state.search.first_contacts(account, days=30, exclude=own)
+        if p["addr"] not in decided
+    ]
+    for p in pending:
+        p["suggestion"], p["reason"] = _screener_suggestion(p)
+    return pending
+
+
+@router.post("/screener/decide")
+def screener_decide(request: Request, body: ScreenerDecideBody):
+    _account(request, body.account)
+    if body.decision not in ("allow", "block"):
+        raise HTTPException(422, "decision muss allow oder block sein")
+    request.app.state.screener.decide(body.account, body.addr, body.decision)
+    return {"ok": True}

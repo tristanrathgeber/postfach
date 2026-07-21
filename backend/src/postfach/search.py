@@ -20,6 +20,7 @@ import re
 import sqlite3
 import threading
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from email_agent.textutil import truncate
@@ -49,6 +50,9 @@ CREATE TABLE IF NOT EXISTS mails (
   message_id TEXT NOT NULL DEFAULT '',
   thread_root TEXT NOT NULL DEFAULT '',
   subject_norm TEXT NOT NULL DEFAULT '',
+  list_unsubscribe TEXT NOT NULL DEFAULT '',
+  list_unsubscribe_post TEXT NOT NULL DEFAULT '',
+  is_sent INTEGER NOT NULL DEFAULT 0,
   UNIQUE(account, folder, uid)
 );
 CREATE INDEX IF NOT EXISTS idx_thread ON mails(account, thread_root);
@@ -184,9 +188,25 @@ class SearchIndex:
         füllt der nächste Voll-Index."""
         existing = {row[1] for row in conn.execute("PRAGMA table_info(mails)")}
         if existing:
-            for column in ("message_id", "thread_root", "subject_norm"):
+            for column in ("message_id", "thread_root", "subject_norm",
+                           "list_unsubscribe", "list_unsubscribe_post"):
                 if column not in existing:
                     conn.execute(f"ALTER TABLE mails ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
+            if "is_sent" not in existing:
+                from .mail_imap import is_sent_folder
+
+                conn.execute("ALTER TABLE mails ADD COLUMN is_sent INTEGER NOT NULL DEFAULT 0")
+                # Backfill sofort: das Gesendet-Wissen speist den Screener-
+                # "bekannt"-Filter — ohne Backfill flutet er nach dem Update
+                # mit längst bekannten Kontakten, bis der Voll-Index läuft.
+                folders = [r[0] for r in conn.execute("SELECT DISTINCT folder FROM mails")]
+                sent = [f for f in folders if is_sent_folder(f)]
+                if sent:
+                    conn.execute(
+                        "UPDATE mails SET is_sent=1 WHERE folder IN"
+                        " (SELECT value FROM json_each(?))",
+                        (json.dumps(sent),),
+                    )
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self._path, timeout=10)
@@ -224,13 +244,16 @@ class SearchIndex:
         " recipients=excluded.recipients, date_iso=excluded.date_iso,"
         " has_attachments=excluded.has_attachments, seen=excluded.seen,"
         " snippet=excluded.snippet, body=excluded.body,"
-        " message_id=excluded.message_id, subject_norm=excluded.subject_norm"
+        " message_id=excluded.message_id, subject_norm=excluded.subject_norm,"
+        " list_unsubscribe=excluded.list_unsubscribe,"
+        " list_unsubscribe_post=excluded.list_unsubscribe_post, is_sent=excluded.is_sent"
     )
     _INSERT_SQL = (
         "INSERT INTO mails (account, folder, uid, subject, from_name, from_addr,"
         " from_text, recipients, date_iso, has_attachments, seen, snippet, body,"
-        " message_id, thread_root, subject_norm)"
-        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+        " message_id, thread_root, subject_norm,"
+        " list_unsubscribe, list_unsubscribe_post, is_sent)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
     )
 
     def add_mails(self, account: str, folder: str, mails: list) -> int:
@@ -252,6 +275,9 @@ class SearchIndex:
         return len(mails)
 
     def _insert_chunk(self, conn, account: str, folder: str, chunk: list) -> None:
+        from .mail_imap import is_sent_folder
+
+        sent_flag = int(is_sent_folder(folder))
         with_refs, without_refs = [], []
         chunk_seen: dict[str, list] = {}
         for m in chunk:
@@ -262,6 +288,7 @@ class SearchIndex:
             chunk_seen.setdefault(normalize_subject(m.subject), []).append(
                 (root, (m.from_addr or "").lower(), " ".join((*m.to, *m.cc)).lower())
             )
+            headers = getattr(m, "headers", None) or {}
             row = (
                 account, folder, m.uid,
                 m.subject or "", m.from_name or "", m.from_addr or "",
@@ -271,6 +298,8 @@ class SearchIndex:
                 truncate(re.sub(r"\s+", " ", (m.body_text or "")[:2000]).strip(), 120),
                 (m.body_text or "")[:_BODY_CAP],
                 m.message_id or "", root, normalize_subject(m.subject),
+                headers.get("list-unsubscribe", "")[:2000],  # feindliche Riesen-Header kappen
+                headers.get("list-unsubscribe-post", "")[:200], sent_flag,
             )
             (with_refs if has_refs else without_refs).append(row)
         if with_refs:
@@ -473,3 +502,126 @@ class SearchIndex:
             {**self._row_to_summary(row[:10]), "thread_count": max(counts.get(row[10], 1), 1)}
             for row in rows
         ]
+
+    # --- Posteingangs-Hygiene (Abo-Manager + Screener) ---
+
+    def _hygiene_folders_sql(self, conn, account: str) -> tuple[str, list]:
+        """WHERE-Fragment, das Spam/Papierkorb ausblendet: Absender, die nur
+        dort liegen, sind weder Abo noch Screener-Kandidat."""
+        from .mail_imap import is_junk_or_trash_folder
+
+        folders = [r[0] for r in conn.execute(
+            "SELECT DISTINCT folder FROM mails WHERE account=?", (account,))]
+        excluded = [f for f in folders if is_junk_or_trash_folder(f)]
+        if not excluded:
+            return "", []
+        return " AND folder NOT IN (SELECT value FROM json_each(?))", [json.dumps(excluded)]
+
+    @staticmethod
+    def _per_month(count: int, first: str, last: str) -> float:
+        """Frequenz aus Zeitspanne — tz-Suffixe kappen, Mischformen (naiv vs.
+        aware) lassen sich sonst nicht subtrahieren. Mit nur einer Mail gibt es
+        keine Spanne — dann ist die ehrliche Zahl schlicht die Mail-Anzahl."""
+        if count < 2:
+            return float(count)
+        try:
+            span = (datetime.fromisoformat(last[:19]) - datetime.fromisoformat(first[:19])).days
+        except ValueError:
+            return float(count)
+        return round(count * 30 / max(span, 1), 1)
+
+    def subscriptions(self, account: str) -> list[dict]:
+        """Abo-Liste: Absender mit List-Unsubscribe-Header, gruppiert, nach
+        Frequenz absteigend. `method` = beste verfügbare Abmelde-Strategie."""
+        from .unsubscribe import parse_list_unsubscribe
+
+        with self._connect() as conn:
+            extra, extra_params = self._hygiene_folders_sql(conn, account)
+            # Header-PAAR immer aus der NEUESTEN Mail (ROW_NUMBER statt zweier
+            # unabhängiger MAX()): sonst mischt die Liste list_unsubscribe von
+            # Mail A mit dem One-Click-Post von Mail B und verspricht eine
+            # Methode, die die Abmelde-Aktion (gleiche Quelle!) nicht einlöst.
+            rows = conn.execute(
+                "SELECT addr, name, cnt, first, last, list_unsubscribe, list_unsubscribe_post"
+                " FROM (SELECT lower(from_addr) AS addr, from_name AS name,"
+                "  COUNT(*) OVER w AS cnt, MIN(date_iso) OVER w AS first,"
+                "  MAX(date_iso) OVER w AS last, list_unsubscribe, list_unsubscribe_post,"
+                "  ROW_NUMBER() OVER (PARTITION BY lower(from_addr) ORDER BY date_iso DESC) AS rn"
+                f"  FROM mails WHERE account=? AND list_unsubscribe != ''"
+                f"  AND is_sent=0 AND from_addr != ''{extra}"
+                "  WINDOW w AS (PARTITION BY lower(from_addr)))"
+                " WHERE rn=1",
+                (account, *extra_params),
+            ).fetchall()
+        subs = []
+        for addr, name, count, first, last, lu, lup in rows:
+            target = parse_list_unsubscribe(lu, lup)
+            if target.one_click:
+                method = "oneclick"
+            elif target.mailto:
+                method = "mailto"
+            elif target.https:
+                method = "link"
+            else:
+                method = "none"  # Header vorhanden, aber nichts Verwertbares (http:/kaputt)
+            subs.append({
+                "addr": addr, "name": name or addr, "count": count,
+                "first_date": first, "last_date": last,
+                "per_month": self._per_month(count, first, last),
+                "method": method,
+            })
+        subs.sort(key=lambda s: s["per_month"], reverse=True)
+        return subs
+
+    def unsubscribe_header(self, account: str, addr: str) -> tuple[str, str] | None:
+        """(list_unsubscribe, list_unsubscribe_post) der NEUESTEN Mail des
+        Absenders — alte Abmelde-Links laufen gern ab."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT list_unsubscribe, list_unsubscribe_post FROM mails"
+                " WHERE account=? AND lower(from_addr)=? AND list_unsubscribe != ''"
+                " ORDER BY date_iso DESC LIMIT 1",
+                (account, addr.strip().lower()),
+            ).fetchone()
+        return (row[0], row[1]) if row else None
+
+    def first_contacts(self, account: str, days: int = 30,
+                       exclude: list[str] | None = None) -> list[dict]:
+        """Screener-Kandidaten: Absender, deren ERSTE Mail jünger als `days`
+        ist und die nie Empfänger einer Gesendet-Mail waren (Token-Match —
+        a@x.de darf nicht via Substring an petra@x.de andocken)."""
+        cutoff = (datetime.now() - timedelta(days=days)).isoformat(timespec="seconds")
+        skip = {a.lower() for a in (exclude or [])}
+        out = []
+        with self._connect() as conn:
+            extra, extra_params = self._hygiene_folders_sql(conn, account)
+            rows = conn.execute(
+                "SELECT lower(from_addr), MAX(from_name), COUNT(*),"
+                " MIN(date_iso), MAX(date_iso), MAX(list_unsubscribe)"
+                f" FROM mails WHERE account=? AND is_sent=0 AND from_addr != ''{extra}"
+                " GROUP BY lower(from_addr) HAVING MIN(date_iso) >= ?"
+                " ORDER BY MAX(date_iso) DESC LIMIT 200",
+                (account, *extra_params, cutoff),
+            ).fetchall()
+            known = " " + " ".join(
+                r[0].lower() for r in conn.execute(
+                    "SELECT recipients FROM mails WHERE account=? AND is_sent=1", (account,))
+            ) + " "
+            for addr, name, count, first, last, lu in rows:
+                if addr in skip or f" {addr} " in known:
+                    continue
+                newest = conn.execute(
+                    "SELECT subject, snippet, folder, uid FROM mails"
+                    " WHERE account=? AND lower(from_addr)=? AND is_sent=0"
+                    " ORDER BY date_iso DESC LIMIT 1",
+                    (account, addr),
+                ).fetchone()
+                subject, snippet, folder, uid = newest or ("", "", "", 0)
+                out.append({
+                    "addr": addr, "name": name or addr, "count": count,
+                    "first_date": first, "last_date": last,
+                    "has_unsubscribe": bool(lu),
+                    "subject": subject, "snippet": snippet,
+                    "folder": folder, "uid": uid,
+                })
+        return out

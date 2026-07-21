@@ -13,6 +13,18 @@ import subprocess
 _SCRIPT = 'on run argv\ndisplay notification (item 2 of argv) with title (item 1 of argv)\nend run'
 
 
+def split_blocked(mails, blocked_addrs: set[str]) -> tuple[list, list]:
+    """Screener-Regel anwenden: (behalten, aussortieren). `blocked_addrs`
+    sind NUTZER-Entscheidungen aus dem Screener — der Watcher verschiebt die
+    aussortierten Mails nach „Aussortiert" und meldet sie nicht."""
+    if not blocked_addrs:
+        return list(mails), []
+    kept, sorted_out = [], []
+    for m in mails:
+        (sorted_out if (m.from_addr or "").lower() in blocked_addrs else kept).append(m)
+    return kept, sorted_out
+
+
 def pick_new_unseen(mails, last_uid: int) -> list:
     """Meldenswerte Mails: ungelesen UND neuer als der letzte Wasserstand —
     verhindert Doppel-Meldungen (Re-IDLE, EXPUNGE-Echos) und verschluckt

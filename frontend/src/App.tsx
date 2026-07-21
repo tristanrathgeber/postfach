@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { BatchAction, Detail, Draft, MsgRef, Snippet, Summary } from './lib/types'
-import { api, errText } from './lib/api'
+import { api, ApiError, errText } from './lib/api'
 import { msgKey, refOf } from './lib/format'
 import { sortCategories } from './lib/categories'
 import { viewFolder, viewKey, viewTitle, type View } from './lib/view'
@@ -23,8 +23,18 @@ import { MessageList } from './components/MessageList'
 import { DraftsList } from './components/DraftsList'
 import { Reader } from './components/Reader'
 import { Composer, type ComposerState } from './components/Composer'
-import { useOutboxAggregate, useRemindersAggregate, useSearchReady, useSettings, useSnippets } from './hooks/useLocalStores'
+import {
+  useOutboxAggregate,
+  useRemindersAggregate,
+  useScreenerAggregate,
+  useSearchReady,
+  useSettings,
+  useSnippets,
+  useSubscriptionsAggregate,
+} from './hooks/useLocalStores'
 import { OutboxList } from './components/OutboxList'
+import { SubscriptionsList } from './components/SubscriptionsList'
+import { ScreenerList } from './components/ScreenerList'
 import { RemindersList } from './components/RemindersList'
 import { timePresets } from './lib/times'
 import { CommandPalette, type PaletteAction } from './components/CommandPalette'
@@ -127,6 +137,8 @@ function Postfach() {
   const searchIndexReady = useSearchReady(accountNames, searchActive)
   const outboxAgg = useOutboxAggregate(accountNames)
   const remindersAgg = useRemindersAggregate(accountNames)
+  const subscriptionsAgg = useSubscriptionsAggregate(accountNames)
+  const screenerAgg = useScreenerAggregate(accountNames)
   const snippetsQuery = useSnippets()
   const settingsQuery = useSettings()
   const actions = useMailActions()
@@ -135,7 +147,14 @@ function Postfach() {
   const categoriesQuery = useQuery({ queryKey: ['categories'], queryFn: api.categories, staleTime: Infinity })
 
   const visible = useMemo((): Summary[] => {
-    if (view.kind === 'drafts' || view.kind === 'outbox' || view.kind === 'reminders') return [] // eigene Listen — keine Mail-Tastatur
+    if (
+      view.kind === 'drafts' ||
+      view.kind === 'outbox' ||
+      view.kind === 'reminders' ||
+      view.kind === 'subscriptions' ||
+      view.kind === 'screener'
+    )
+      return [] // eigene Listen — keine Mail-Tastatur
     if (view.kind === 'search') return searchAgg.messages
     if (view.kind === 'unread') return messagesAgg.messages.filter((m) => !m.seen)
     if (view.kind === 'category') return messagesAgg.messages.filter((m) => m.category === view.category)
@@ -390,6 +409,42 @@ function Postfach() {
     onError: (e) => showToast(`Fehlgeschlagen: ${errText(e)}`, 'error'),
   })
 
+  // --- Posteingangs-Hygiene ---
+  // Alle Zeilen-Zustände sind KOMPOSIT gekeyt (konto:adresse): derselbe
+  // Newsletter in zwei Konten darf weder Links (personalisierte Tokens!)
+  // noch Armierung oder Busy-Anzeige teilen.
+  const [unsubLinks, setUnsubLinks] = useState<Record<string, string>>({})
+  const unsubscribeMutation = useMutation({
+    mutationFn: (row: { account: string; addr: string }) => api.unsubscribe(row),
+    onSuccess: (result, row) => {
+      if (result.ok) {
+        qc.invalidateQueries({ queryKey: ['subscriptions'] })
+        showToast(result.method === 'mailto' ? 'Abmelde-Mail gesendet.' : 'Abgemeldet (One-Click).')
+      } else {
+        // Link-Abmeldung (kein One-Click/mailto): Zeile zeigt danach
+        // „Abmeldeseite öffnen" — kein blinder window.open.
+        setUnsubLinks((prev) => ({ ...prev, [`${row.account}:${row.addr}`]: result.link }))
+      }
+    },
+    onError: (e, row) => {
+      showToast(`Abmelden fehlgeschlagen: ${errText(e)}`, 'error')
+      // 409 = anderswo bereits abgemeldet — veraltete Zeile sofort auffrischen
+      // statt bis zum 60-s-Poll klickbar zu bleiben.
+      if (e instanceof ApiError && e.status === 409) {
+        qc.invalidateQueries({ queryKey: ['subscriptions', row.account] })
+      }
+    },
+  })
+
+  const screenerDecideMutation = useMutation({
+    mutationFn: (v: { account: string; addr: string; decision: 'allow' | 'block' }) => api.screenerDecide(v),
+    onSuccess: (_r, v) => {
+      qc.invalidateQueries({ queryKey: ['screener'] })
+      showToast(v.decision === 'block' ? `${v.addr} wird künftig aussortiert.` : `${v.addr} zugelassen.`)
+    },
+    onError: (e) => showToast(`Entscheidung fehlgeschlagen: ${errText(e)}`, 'error'),
+  })
+
   // --- Suche ---
   const submitSearch = useCallback(
     (q: string) => {
@@ -483,7 +538,15 @@ function Postfach() {
         break
       case '/':
         e.preventDefault()
-        searchInputRef.current?.focus()
+        if (searchInputRef.current) {
+          searchInputRef.current.focus()
+        } else {
+          // Ansichten ohne Suchfeld (Entwürfe/Ausgang/Abos/…): zur Inbox
+          // wechseln statt still nichts zu tun — Blindtippen würde sonst
+          // globale Shortcuts auslösen (c öffnet den Composer!).
+          setView({ kind: 'inbox' })
+          requestAnimationFrame(() => requestAnimationFrame(() => searchInputRef.current?.focus()))
+        }
         break
       case 'i':
         if (seqRef.current.consume('g')) setView({ kind: 'inbox' })
@@ -677,13 +740,36 @@ function Postfach() {
             outboxCount={outboxAgg.entries.length}
             remindersCount={remindersAgg.entries.length}
             remindersDue={remindersAgg.dueCount}
+            subscriptionsCount={subscriptionsAgg.entries.filter((s) => s.unsubscribed_at === null).length}
+            screenerCount={screenerAgg.entries.length}
             folders={foldersQuery.data ?? []}
             status={statusQuery.data?.accounts ?? {}}
             onOpenSettings={() => setSettingsOpen(true)}
           />
         }
         list={
-          view.kind === 'outbox' ? (
+          view.kind === 'subscriptions' ? (
+            <SubscriptionsList
+              entries={subscriptionsAgg.entries}
+              links={unsubLinks}
+              busyKey={
+                unsubscribeMutation.isPending
+                  ? `${unsubscribeMutation.variables.account}:${unsubscribeMutation.variables.addr}`
+                  : null
+              }
+              onUnsubscribe={(s) => unsubscribeMutation.mutate({ account: s.account, addr: s.addr })}
+            />
+          ) : view.kind === 'screener' ? (
+            <ScreenerList
+              entries={screenerAgg.entries}
+              busyKey={
+                screenerDecideMutation.isPending
+                  ? `${screenerDecideMutation.variables.account}:${screenerDecideMutation.variables.addr}`
+                  : null
+              }
+              onDecide={(e, decision) => screenerDecideMutation.mutate({ account: e.account, addr: e.addr, decision })}
+            />
+          ) : view.kind === 'outbox' ? (
             <OutboxList entries={outboxAgg.entries} onCancel={(e) => cancelOutboxMutation.mutate(e.id)} />
           ) : view.kind === 'reminders' ? (
             <RemindersList entries={remindersAgg.entries} onDone={(r) => reminderDoneMutation.mutate(r.id)} />

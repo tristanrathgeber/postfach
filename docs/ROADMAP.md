@@ -46,9 +46,15 @@ Leitplanken (gelten für jeden Batch):
 - [x] **Snooze auf Plain-IMAP** (Taste z / Reader-Menü; Ordner „Später", Rückkehr per Message-ID ungelesen in die Inbox — die Marktlücke ist zu)
 - [x] **Follow-up-Reminder** (beim Senden 3/7 Tage; löst sich still bei fremder Antwort im Faden, sonst Ansicht „Wiedervorlage" + Meldung)
 
-## Batch 6 — Posteingangs-Hygiene: Abo-Manager + Screener
-- [ ] **Abo-Manager**: alle Newsletter als Liste (Absender, Frequenz) + **1-Klick-Abmelden** via List-Unsubscribe (parsen wir bereits!)
-- [ ] **Screener** (HEY-Learning): Erstkontakt-Absender landen in einer Prüfliste — zulassen/ablehnen, KI schlägt lokal vor, Entscheidung merkt sich die App
+## Batch 6 — Posteingangs-Hygiene: Abo-Manager + Screener ✅ (2026-07-21)
+- [x] **Abo-Manager**: alle Newsletter als Liste (Absender, Frequenz) + **1-Klick-Abmelden** via List-Unsubscribe (parsen wir bereits!)
+  - Index-Spalten `list_unsubscribe`/`list_unsubscribe_post`/`is_sent` + Migration mit is_sent-Backfill; Header-Paar konsistent aus der neuesten Mail (ROW_NUMBER)
+  - Strategie: RFC-8058-One-Click-POST (nur https, SSRF-Guard: keine privaten Ziele, keine Redirects) → mailto über den SMTP-Pfad → Link im Browser
+  - Zweitklick-Bestätigung mit Doppelklick-Karenz; Abmeldungen in `data/subscriptions.json` (409 bei Doppelung); real: 112 Abos erkannt
+- [x] **Screener** (HEY-Learning): Erstkontakt-Absender landen in einer Prüfliste — zulassen/ablehnen, KI schlägt lokal vor, Entscheidung merkt sich die App
+  - Erstkontakt = erste Mail < 30 Tage + nie Gesendet-Empfänger (Token-Match) + keine Entscheidung; Spam/Papierkorb zählen nicht
+  - Vorschlag ehrlich regelbasiert (Abmelde-Header / geteilter NOREPLY_RE) — kein LLM-Call; „Ablehnen" = Nutzer-Regel: Watcher verschiebt künftige Mails nach „Aussortiert" (nie Papierkorb), ohne Notification
+  - Entscheidungen in `data/screener.json`; real: 30 Kandidaten in 30 Tagen
 
 ## Batch 7 — Emilia II (KI-Ausbau)
 - [ ] **Streaming-Antworten** (Text erscheint beim Generieren)

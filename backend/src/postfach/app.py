@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import threading
 from contextlib import contextmanager
@@ -18,6 +19,8 @@ from .emilia import EmiliaService
 from .mail_imap import Mailbox
 from .memory import FakeEmbedder, MailMemory, OllamaEmbedder
 from .watcher import LiveState, start_watcher_thread
+
+log = logging.getLogger(__name__)
 
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("POSTFACH_PORT", "8722"))
@@ -47,7 +50,7 @@ def create_app(root: Path | None = None, demo: bool | None = None, mailbox_facto
     data_dir = root / "data"
     style_path = root / "config" / "style_profile.md"
 
-    from .stores import DraftStore, SettingsStore, SnippetStore
+    from .stores import DraftStore, ScreenerStore, SettingsStore, SnippetStore, SubscriptionStore
 
     app = FastAPI(title="Postfach", version="0.3.0")
     app.state.config = cfg
@@ -59,6 +62,8 @@ def create_app(root: Path | None = None, demo: bool | None = None, mailbox_facto
     app.state.settings = SettingsStore(store_dir / "settings.json")
     app.state.drafts = DraftStore(store_dir / "drafts.json")
     app.state.snippets = SnippetStore(store_dir / "snippets.json")
+    app.state.subscriptions = SubscriptionStore(store_dir / "subscriptions.json")
+    app.state.screener = ScreenerStore(store_dir / "screener.json")
 
     from .search import SearchIndex
 
@@ -147,11 +152,21 @@ def create_app(root: Path | None = None, demo: bool | None = None, mailbox_facto
             def _index_new_mail(account_name: str) -> None:
                 # Neue Mails in Emilias Gedächtnis aufnehmen und (falls pro
                 # Konto aktiviert) nativ melden — EIN Fetch für beides, Best Effort.
-                from .notify import notify_macos, pick_new_unseen
+                from .notify import notify_macos, pick_new_unseen, split_blocked
 
                 account = app.state.accounts[account_name]
                 with open_mailbox(account) as box:
                     mails = box.list_messages("INBOX", 10)
+                    # Screener-Regel (NUTZER-Entscheidung, keine KI): geblockte
+                    # Absender nach „Aussortiert" — nie Papierkorb, nie löschen.
+                    kept, sorted_out = split_blocked(mails, app.state.screener.blocked(account_name))
+                    if sorted_out:
+                        try:
+                            box.move_many("INBOX", [m.uid for m in sorted_out],
+                                          "Aussortiert", ensure=True)
+                            mails = kept  # weder indexieren (neue UID im Ziel) noch melden
+                        except Exception:
+                            log.exception("Aussortieren fehlgeschlagen (%s)", account_name)
                 app.state.emilia.index_mails(account_name, "INBOX", mails, owner_addr=account.address)
                 app.state.search.add_mails(account_name, "INBOX", mails)
                 with notify_lock:

@@ -16,6 +16,14 @@ from pathlib import Path
 
 import httpx
 
+# Automaten-Absender (kein Mensch antwortet): geteilt zwischen Kontakt-Ernte
+# und Screener-Heuristik — EINE Liste, die nicht auseinanderdriftet.
+NOREPLY_RE = re.compile(
+    r"^(no[-_]?reply|do[-_]?not[-_]?reply|donotreply|newsletter|news|mailing"
+    r"|notifications?|updates?|info|mailer-daemon|postmaster|bounces?|daemon)[@.+\-_]",
+    re.I,
+)
+
 
 class FakeEmbedder:
     """Deterministisch, ohne Ollama — für Tests und Demo-Modus.
@@ -139,11 +147,7 @@ class MailMemory:
 
     # --- Kontakte (für Empfänger-Autocomplete) ---
 
-    _NOREPLY_RE = re.compile(
-        r"^(no[-_]?reply|do[-_]?not[-_]?reply|donotreply|newsletter|news|mailing"
-        r"|notifications?|updates?|info|mailer-daemon|postmaster|bounces?|daemon)[@.+\-_]",
-        re.I,
-    )
+    _NOREPLY_RE = NOREPLY_RE
 
     def upsert_contacts(self, entries: list[tuple[str, str, float, str]]) -> None:
         """entries: (name, addr, gewicht, datum-iso). Gewicht kumuliert —

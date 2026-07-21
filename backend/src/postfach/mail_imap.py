@@ -28,6 +28,14 @@ def is_sent_folder(folder: str) -> bool:
     return folder.lower() in _SENT_NAMES or leaf in _SENT_NAMES
 
 
+def is_junk_or_trash_folder(folder: str) -> bool:
+    """Spam-/Papierkorb-Erkennung für die Hygiene-Ansichten: Absender, die nur
+    dort auftauchen, gehören weder in den Screener noch in die Abo-Liste."""
+    leaf = folder.split("/")[-1].split(".")[-1].lower()
+    names = _JUNK_NAMES | _TRASH_NAMES
+    return folder.lower() in names or leaf in names
+
+
 @dataclass(frozen=True)
 class AttachmentMeta:
     index: int

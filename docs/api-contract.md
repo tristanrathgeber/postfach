@@ -164,3 +164,19 @@ Scheduler: lokale Warteschlange (data/schedule.json + data/outbox/), Tick 20 s,
 Jobs idempotent und neustartfest. Follow-up löscht sich still, wenn der
 Thread-Index eine fremde Antwort nach dem Versandzeitpunkt kennt.
 Sicherheits-Invariante: Nur explizite Senden-Klicks legen Send-Jobs an.
+
+## Nachtrag v0.8 — Batch 6 „Posteingangs-Hygiene" (eingefroren 2026-07-21)
+
+| Methode & Pfad | Request | Response |
+|---|---|---|
+| `GET /api/subscriptions?account=` | — | `[{"addr","name","count","first_date","last_date","per_month","method":"oneclick"\|"mailto"\|"link"\|"none","unsubscribed_at":iso\|null}]` |
+| `POST /api/subscriptions/unsubscribe` | `{"account","addr"}` | `{"ok":true,"method":"oneclick"\|"mailto"}` oder `{"ok":false,"method":"link","link":url}` (UI öffnet im Browser) |
+| `GET /api/screener?account=` | — | `[{"addr","name","count","first_date","last_date","has_unsubscribe","subject","snippet","folder","uid","suggestion":"allow"\|"block","reason"}]` — Erstkontakte ohne Entscheidung; subject/snippet/folder/uid = neueste Mail des Absenders |
+| `POST /api/screener/decide` | `{"account","addr","decision":"allow"\|"block"}` | `{"ok":true}` |
+
+Abmelde-Strategie: RFC-8058-One-Click-POST (nur https, keine Redirects) →
+mailto-Send über den normalen SMTP-Pfad (explizite UI-Aktion) → sonst Link.
+Screener: „block" ist eine NUTZER-Regel — der Live-Watcher verschiebt künftige
+Mails des Absenders in den Ordner „Aussortiert" (nie Papierkorb, nie löschen)
+und unterdrückt deren Benachrichtigung. Erstkontakt = erste Mail < 30 Tage,
+Adresse nie Empfänger einer Gesendet-Mail, keine Entscheidung vorhanden.

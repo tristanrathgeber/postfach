@@ -7,6 +7,9 @@ import type {
   OutboxEntry,
   Reminder,
   MsgRef,
+  ScreenerEntry,
+  Subscription,
+  UnsubscribeResult,
   ThreadMail,
   Account,
   Classification,
@@ -219,4 +222,21 @@ export const api = {
 
   /** PUT /api/snippets */
   putSnippets: (items: Snippet[]): Promise<{ ok: true }> => put('/snippets', items),
+
+  // --- Posteingangs-Hygiene (Nachtrag v0.8) ---
+
+  /** GET /api/subscriptions?account= — Abo-Liste, nach Frequenz sortiert. */
+  subscriptions: (account: string): Promise<Subscription[]> =>
+    request(`/subscriptions?account=${enc(account)}`),
+
+  /** POST /api/subscriptions/unsubscribe — One-Click/mailto serverseitig, sonst Link. */
+  unsubscribe: (body: { account: string; addr: string }): Promise<UnsubscribeResult> =>
+    post('/subscriptions/unsubscribe', body),
+
+  /** GET /api/screener?account= — Erstkontakte ohne Entscheidung. */
+  screener: (account: string): Promise<ScreenerEntry[]> => request(`/screener?account=${enc(account)}`),
+
+  /** POST /api/screener/decide — allow/block; block = Nutzer-Regel für den Watcher. */
+  screenerDecide: (body: { account: string; addr: string; decision: 'allow' | 'block' }): Promise<{ ok: true }> =>
+    post('/screener/decide', body),
 }

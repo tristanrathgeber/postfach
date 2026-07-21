@@ -88,6 +88,41 @@ export type Reminder = { id: string; kind: 'snooze' | 'followup' | 'followup_due
 /** Referenz auf eine konkrete Nachricht (Konto + Ordner + UID). */
 export type MsgRef = { account: string; folder: string; uid: number }
 
+// --- Posteingangs-Hygiene (Nachtrag v0.8) ---
+
+/** GET /api/subscriptions — ein Abo-Absender, nach Frequenz sortiert. */
+export type Subscription = {
+  addr: string
+  name: string
+  count: number
+  first_date: string
+  last_date: string
+  per_month: number
+  method: 'oneclick' | 'mailto' | 'link' | 'none'
+  unsubscribed_at: string | null
+}
+
+/** POST /api/subscriptions/unsubscribe — ok:false + link ⇒ UI öffnet im Browser. */
+export type UnsubscribeResult =
+  | { ok: true; method: 'oneclick' | 'mailto' }
+  | { ok: false; method: 'link'; link: string }
+
+/** GET /api/screener — Erstkontakt ohne Entscheidung, mit regelbasiertem Vorschlag. */
+export type ScreenerEntry = {
+  addr: string
+  name: string
+  count: number
+  first_date: string
+  last_date: string
+  has_unsubscribe: boolean
+  subject: string
+  snippet: string
+  folder: string
+  uid: number
+  suggestion: 'allow' | 'block'
+  reason: string
+}
+
 // --- Emilia (Nachtrag v0.2, eingefroren 2026-07-20) ---
 
 /** GET /api/emilia/status */
