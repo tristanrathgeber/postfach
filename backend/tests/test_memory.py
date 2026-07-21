@@ -119,3 +119,23 @@ def test_search_scoped_per_account(tmp_path):
     memory = MailMemory(tmp_path / "memory.db", FakeEmbedder())
     memory.upsert_many([_entry(1)])
     assert memory.search("anderes-konto", "Betreff", k=3) == []
+
+
+def test_upsert_many_skips_already_indexed(tmp_path):
+    # Mails sind unveränderlich — erneutes Indexieren derselben UIDs darf keine
+    # Embeddings neu rechnen (der Live-Watcher indexiert bei jedem Push).
+    calls = []
+
+    class CountingEmbedder(FakeEmbedder):
+        def embed(self, texts):
+            calls.append(len(texts))
+            return super().embed(texts)
+
+    memory = MailMemory(tmp_path / "m.db", CountingEmbedder())
+    entry = {
+        "account": "a", "folder": "INBOX", "uid": 1, "subject": "S",
+        "from_name": "N", "from_addr": "n@x.de", "date": "2026-07-01", "snippet": "T",
+    }
+    memory.upsert_many([entry])
+    memory.upsert_many([entry, {**entry, "uid": 2}])
+    assert calls == [1, 1]  # zweiter Lauf: nur die neue UID 2

@@ -1,6 +1,6 @@
 import { useQueries, useQuery } from '@tanstack/react-query'
 import { api } from '../lib/api'
-import type { Summary } from '../lib/types'
+import type { Draft, Summary } from '../lib/types'
 
 /** Pseudo-Konto "Alle Konten": aggregiert client-seitig über alle echten Konten. */
 export const ALL_ACCOUNTS = '__alle_konten__'
@@ -66,6 +66,30 @@ export function useMessagesAggregate(accountNames: string[], folder: string): Ag
       queryFn: () => api.messages(name, folder, MESSAGE_LIMIT),
     })),
     combine: (results) => combineAccounts(accountNames, results),
+  })
+}
+
+/**
+ * Entwürfe (Nachtrag v0.3): der Vertrag liefert Entwürfe pro Konto
+ * (GET /api/drafts?account=) — "Alle Konten" holt je Konto und merged,
+ * neueste Änderung zuerst. Query-Keys je Konto stabil: ["drafts", account].
+ */
+export function useDraftsAggregate(accountNames: string[]): { drafts: Draft[]; isLoading: boolean } {
+  return useQueries({
+    queries: accountNames.map((name) => ({
+      queryKey: ['drafts', name],
+      queryFn: () => api.drafts(name),
+      // Lokaler Store: Auto-Save/Löschen invalidieren explizit — kein Polling nötig.
+      staleTime: Infinity,
+      refetchInterval: false as const,
+      refetchOnWindowFocus: false,
+    })),
+    combine: (results) => ({
+      drafts: results
+        .flatMap((r) => r.data ?? [])
+        .sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime()),
+      isLoading: results.some((r) => r.isLoading),
+    }),
   })
 }
 

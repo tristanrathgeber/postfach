@@ -1,5 +1,0 @@
-#!/bin/zsh
-# Von build_app.sh erzeugt — Repo-Pfad ist fest eingebrannt.
-export PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
-cd "/Users/tristanrathgeber/Projects/postfach/backend"
-exec uv run --extra desktop postfach-app

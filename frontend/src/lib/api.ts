@@ -1,17 +1,24 @@
 // Typisierter API-Client — exakt gegen docs/api-contract.md (v0.1: 10 Endpunkte,
-// Nachtrag v0.2: 4 Emilia-Endpunkte). Fehlerform: {"detail": "<Meldung>"} mit
-// Status 4xx/5xx; Konto nicht erreichbar → 502.
+// Nachtrag v0.2: 4 Emilia-Endpunkte, Nachtrag v0.3: Settings/Kontakte/Entwürfe/
+// Snippets + multipart-Send). Fehlerform: {"detail": "<Meldung>"} mit Status
+// 4xx/5xx; Konto nicht erreichbar → 502.
 
 import type {
   Account,
   Classification,
+  Contact,
   Detail,
+  Draft,
+  DraftUpsert,
   EmiliaChatRequest,
   EmiliaChatResponse,
   EmiliaImproveMode,
   EmiliaStatus,
   MessageAction,
   SendRequest,
+  SendResponse,
+  Settings,
+  Snippet,
   Summary,
 } from './types'
 
@@ -69,6 +76,14 @@ function post<T>(path: string, body: unknown): Promise<T> {
   })
 }
 
+function put<T>(path: string, body: unknown): Promise<T> {
+  return request<T>(path, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
 const enc = encodeURIComponent
 
 export const api = {
@@ -101,8 +116,20 @@ export const api = {
   /** POST /api/draft */
   draft: (body: { account: string; folder: string; uid: number }): Promise<{ text: string }> => post('/draft', body),
 
-  /** POST /api/send */
-  send: (body: SendRequest): Promise<{ ok: true }> => post('/send', body),
+  /** POST /api/send — JSON-Variante (ohne hochgeladene Anhänge) */
+  send: (body: SendRequest): Promise<SendResponse> => post('/send', body),
+
+  /**
+   * POST /api/send — multipart/form-data: Feld "payload" (JSON als String) +
+   * "files"-Einträge (gesamt ≤ 25 MB → 413). Kein Content-Type-Header setzen,
+   * der Browser ergänzt die multipart-Boundary selbst.
+   */
+  sendWithAttachments: (payload: SendRequest, files: File[]): Promise<SendResponse> => {
+    const form = new FormData()
+    form.append('payload', JSON.stringify(payload))
+    for (const file of files) form.append('files', file, file.name)
+    return request('/send', { method: 'POST', body: form })
+  },
 
   /** GET /api/search?account=&q=&folder=INBOX */
   search: (account: string, q: string, folder = 'INBOX'): Promise<Summary[]> =>
@@ -122,4 +149,30 @@ export const api = {
 
   /** GET /api/emilia/status */
   emiliaStatus: (): Promise<EmiliaStatus> => request('/emilia/status'),
+
+  // --- Batch 1 „Schreiben komplett" (Nachtrag v0.3) ---
+
+  /** GET /api/settings */
+  settings: (): Promise<Settings> => request('/settings'),
+
+  /** PUT /api/settings */
+  putSettings: (body: Settings): Promise<{ ok: true }> => put('/settings', body),
+
+  /** GET /api/contacts?q=&limit=8 — Ranking: Häufigkeit×Aktualität, Sent-Empfänger doppelt */
+  contacts: (q: string, limit = 8): Promise<Contact[]> => request(`/contacts?q=${enc(q)}&limit=${limit}`),
+
+  /** GET /api/drafts?account= */
+  drafts: (account: string): Promise<Draft[]> => request(`/drafts?account=${enc(account)}`),
+
+  /** POST /api/drafts — mit id = Upsert (Auto-Save) */
+  saveDraft: (body: DraftUpsert): Promise<{ id: string }> => post('/drafts', body),
+
+  /** DELETE /api/drafts/{id} — betrifft nur das lokale Artefakt */
+  deleteDraft: (id: string): Promise<{ ok: true }> => request(`/drafts/${enc(id)}`, { method: 'DELETE' }),
+
+  /** GET /api/snippets */
+  snippets: (): Promise<Snippet[]> => request('/snippets'),
+
+  /** PUT /api/snippets */
+  putSnippets: (items: Snippet[]): Promise<{ ok: true }> => put('/snippets', items),
 }

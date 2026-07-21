@@ -26,8 +26,8 @@ class FakeSMTP:
     def login(self, user, password):
         self.calls.append(("login", user, password))
 
-    def send_message(self, msg):
-        self.calls.append(("send", msg))
+    def send_message(self, msg, to_addrs=None):
+        self.calls.append(("send", msg, to_addrs))
 
 
 def _account(port=587):
@@ -89,3 +89,61 @@ def test_send_uses_ssl_on_465(monkeypatch):
 def test_password_never_in_mime():
     mime = build_outgoing("t@x.de", ["a@b.de"], [], "Hi", "Text")
     assert b"geheim" not in mime
+
+
+def test_bcc_header_present_in_mime_for_sent_copy():
+    # Die Gesendet-Kopie behält Bcc (smtplib entfernt ihn beim Versand selbst).
+    mime_bytes = build_outgoing("t@x.de", ["a@b.de"], [], "Hi", "Text", bcc=["geheim@c.de"])
+    parsed = message_from_bytes(mime_bytes, policy=default_policy)
+    assert parsed["Bcc"] == "geheim@c.de"
+
+
+def test_attachments_are_added_with_filename_and_type():
+    mime_bytes = build_outgoing(
+        "t@x.de", ["a@b.de"], [], "Hi", "Text",
+        attachments=[("bericht.pdf", "application/pdf", b"%PDF-1.4 daten"),
+                     ("notiz.txt", "text/plain", "Inhalt äöü".encode())],
+    )
+    parsed = message_from_bytes(mime_bytes, policy=default_policy)
+    parts = [p for p in parsed.walk() if p.get_content_disposition() == "attachment"]
+    assert [p.get_filename() for p in parts] == ["bericht.pdf", "notiz.txt"]
+    assert parts[0].get_content_type() == "application/pdf"
+    assert parts[0].get_payload(decode=True).startswith(b"%PDF")
+    assert "Grüße" not in parsed.get_body(preferencelist=("plain",)).get_content()  # Body bleibt der Text
+    assert "Text" in parsed.get_body(preferencelist=("plain",)).get_content()
+
+
+def test_crlf_in_headers_is_sanitized():
+    # Untrusted Eingaben (auch Anhang-Namen fremder Mails) dürfen nie
+    # Header-Injection auslösen — und nie einen 500er (ValueError) provozieren.
+    mime_bytes = build_outgoing(
+        "t@x.de", ["a@b.de\r\nCc: evil@x.de"], [], "Hi\r\nBcc: evil@x.de", "Text",
+    )
+    parsed = message_from_bytes(mime_bytes, policy=default_policy)
+    assert parsed["Bcc"] is None
+    assert "evil" in parsed["Subject"]  # Inhalt bleibt, nur die Zeilenstruktur nicht
+    assert len(parsed.get_all("Cc") or []) == 0
+
+
+def test_attachment_filename_crlf_sanitized():
+    mime_bytes = build_outgoing(
+        "t@x.de", ["a@b.de"], [], "Hi", "Text",
+        attachments=[("bericht\r\nX-Evil: 1.pdf", "application/pdf", b"%PDF")],
+    )
+    parsed = message_from_bytes(mime_bytes, policy=default_policy)
+    [part] = [p for p in parsed.walk() if p.get_content_disposition() == "attachment"]
+    assert "\r" not in part.get_filename() and "\n" not in part.get_filename()
+
+
+def test_send_strips_bcc_and_keeps_bcc_recipient_in_envelope(monkeypatch):
+    # Bcc-Invariante am Transport selbst: Header runter, Empfänger in den Envelope —
+    # unabhängig davon, ob smtplib das implizit auch täte.
+    FakeSMTP.instances = []
+    monkeypatch.setattr(mail_send.smtplib, "SMTP", FakeSMTP)
+    mime = build_outgoing("t@x.de", ["a@b.de"], [], "Hi", "Text", bcc=["geheim@c.de"])
+    send_mail(_account(587), "pw", mime)
+    [smtp] = FakeSMTP.instances
+    [send_call] = [c for c in smtp.calls if isinstance(c, tuple) and c[0] == "send"]
+    _tag, msg, to_addrs = send_call
+    assert msg["Bcc"] is None
+    assert "geheim@c.de" in to_addrs and "a@b.de" in to_addrs

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import type { Account } from '../lib/types'
 import { sameView, type View } from '../lib/view'
 import { ALL_ACCOUNTS } from '../hooks/useMailData'
-import { ChevronDownIcon, ChevronRightIcon } from './Icons'
+import { ChevronDownIcon, ChevronRightIcon, GearIcon } from './Icons'
 
 export type CategoryEntry = { name: string; count: number }
 
@@ -15,7 +15,9 @@ type SidebarProps = {
   categories: CategoryEntry[]
   inboxCount: number
   unreadCount: number
+  draftsCount: number
   folders: string[]
+  onOpenSettings: () => void
 }
 
 function NavRow({
@@ -149,7 +151,9 @@ export function Sidebar({
   categories,
   inboxCount,
   unreadCount,
+  draftsCount,
   folders,
+  onOpenSettings,
 }: SidebarProps) {
   // Standardmäßig AUSGEKLAPPT — der eingeklappte Mini-Schalter war in der
   // Praxis nicht auffindbar (Nutzer-Feedback).
@@ -203,6 +207,12 @@ export function Sidebar({
           count={unreadCount}
           active={sameView(view, { kind: 'unread' })}
           onClick={() => onSelectView({ kind: 'unread' })}
+        />
+        <NavRow
+          label="Entwürfe"
+          count={draftsCount}
+          active={sameView(view, { kind: 'drafts' })}
+          onClick={() => onSelectView({ kind: 'drafts' })}
         />
 
         {categories.length > 0 ? (
@@ -258,7 +268,16 @@ export function Sidebar({
         )}
       </nav>
 
-      <footer className="border-t border-hairline px-4 py-2.5">
+      <footer className="flex items-center gap-2 border-t border-hairline px-3 py-2">
+        <button
+          type="button"
+          onClick={onOpenSettings}
+          title="Einstellungen (Signaturen & Snippets)"
+          aria-label="Einstellungen"
+          className="rounded p-1 text-muted transition hover:bg-[#F1EFEA] hover:text-tinte"
+        >
+          <GearIcon size={14} />
+        </button>
         <p className="font-mono text-[10px] text-muted">⌘K Befehle</p>
       </footer>
     </aside>

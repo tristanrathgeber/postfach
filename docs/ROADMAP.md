@@ -10,14 +10,16 @@ Leitplanken (gelten für jeden Batch):
 - KI: nur auf Abruf oder vorberechnet, immer abschaltbar, nie Latenz auf Kernaktionen, nie Auto-Summaries.
 - Fehler nie still (Verbindungsstatus sichtbar); keine Feature-Entfernung ohne Ersatz; TDD.
 
-## Batch 1 — Schreiben komplett (Table Stakes I)
-- [ ] **Weiterleiten** (mit Anhängen, korrektem Quoting, „Fwd:"-Regel)
-- [ ] **BCC** im Composer
-- [ ] **Signaturen** pro Konto (Editor in der App, automatische Anfügung)
-- [ ] **Entwürfe speichern** (automatisch lokal + in den IMAP-Entwürfe-Ordner; Wiederöffnen)
-- [ ] **Anhänge senden** (Dateiauswahl + Drag & Drop in den Composer)
-- [ ] **Kontakte-Autocomplete** (lokal aus bisherigen Mails aufgebaut)
-- [ ] **Snippets** (Textbausteine mit Variablen, per Kürzel — Superhuman-Learning)
+## Batch 1 — Schreiben komplett (Table Stakes I) ✅ 2026-07-21
+- [x] **Weiterleiten** (mit Anhängen, korrektem Quoting, „Fwd:"-Regel)
+- [x] **BCC** im Composer (Bcc-Header bleibt in der Sent-Kopie, SMTP entfernt ihn beim Versand)
+- [x] **Signaturen** pro Konto (Editor in der App, automatische Anfügung mit „-- “-Trenner)
+- [x] **Entwürfe speichern** (automatisch lokal, Wiederöffnen/Löschen; IMAP-Entwürfe-Ordner
+  bewusst verschoben — IMAP kann Drafts nicht updaten, Altversionen-Löschen kollidiert mit
+  unserer Nie-Löschen-Garantie, siehe Spec 2026-07-21)
+- [x] **Anhänge senden** (Dateiauswahl + Drag & Drop, 25-MB-Limit client- und serverseitig)
+- [x] **Kontakte-Autocomplete** (lokal aus bisherigen Mails aufgebaut, Ranking nach Häufigkeit×Aktualität)
+- [x] **Snippets** (Textbausteine mit {vorname}/{datum}, per ;kürzel+Tab und ⌘K)
 
 ## Batch 2 — Empfangen & Ordnung (Table Stakes II)
 - [ ] **macOS-Benachrichtigungen** (nativ, aus dem vorhandenen Push-Kanal; pro Konto schaltbar)

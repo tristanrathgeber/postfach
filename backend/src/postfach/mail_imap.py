@@ -20,6 +20,13 @@ _SENT_NAMES = {"sent", "sent items", "sent messages", "gesendet", "gesendete obj
 _ARCHIVE_NAMES = {"archive", "archiv", "all mail", "alle nachrichten"}
 
 
+def is_sent_folder(folder: str) -> bool:
+    """Kanonische Sent-Erkennung per Ordnername — einzige Wahrheit, damit
+    z. B. die Kontakt-Ernte keine eigene, driftende Namensliste pflegt."""
+    leaf = folder.split("/")[-1].split(".")[-1].lower()
+    return folder.lower() in _SENT_NAMES or leaf in _SENT_NAMES
+
+
 @dataclass(frozen=True)
 class AttachmentMeta:
     index: int
@@ -168,20 +175,26 @@ class Mailbox:
         self._client.select_folder(folder, readonly=True)
         return uid in set(self._client.search(["UID", str(uid)]))
 
-    def get_attachment(self, folder: str, uid: int, index: int) -> AttachmentFile | None:
+    def get_attachment_files(self, folder: str, uid: int) -> list[AttachmentFile]:
+        """Alle Anhänge mit EINEM Fetch + Parse — der Weiterleitungs-Pfad
+        holt sonst dieselbe Mail pro Anhang komplett neu über IMAP."""
         raw = self._raw_for(folder, uid)
         if raw is None:
-            return None
+            return []
         msg = email.message_from_bytes(raw, policy=default_policy)
         _t, _h, attachment_parts = _walk_parts(msg)
-        if index >= len(attachment_parts):
-            return None
-        part = attachment_parts[index]
-        return AttachmentFile(
-            filename=str(part.get_filename() or f"anhang-{index}"),
-            content_type=part.get_content_type(),
-            payload=part.get_payload(decode=True) or b"",
-        )
+        return [
+            AttachmentFile(
+                filename=str(part.get_filename() or f"anhang-{i}"),
+                content_type=part.get_content_type(),
+                payload=part.get_payload(decode=True) or b"",
+            )
+            for i, part in enumerate(attachment_parts)
+        ]
+
+    def get_attachment(self, folder: str, uid: int, index: int) -> AttachmentFile | None:
+        files = self.get_attachment_files(folder, uid)
+        return files[index] if index < len(files) else None
 
     def search(self, folder: str, query: str) -> list[ParsedMail]:
         from imapclient.exceptions import IMAPClientError

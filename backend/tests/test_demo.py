@@ -53,3 +53,11 @@ def test_demo_classifier_is_deterministic_and_covers_categories():
     assert "Newsletter" in categories
     assert "Aktion-nötig" in categories
     assert result == demo_classify(mails)  # deterministisch
+
+
+def test_demo_get_attachment_files_bulk():
+    # Pendant zur Mailbox-Bulk-API: ein Fetch liefert alle Anhänge (Send-Pfad).
+    box = DemoMailbox()
+    files = box.get_attachment_files("INBOX", 109)
+    assert [f.filename for f in files] == ["Rechnung Juli 39,95€.pdf"]
+    assert files[0].payload

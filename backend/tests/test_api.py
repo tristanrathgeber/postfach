@@ -152,6 +152,71 @@ def test_gmail_provider_skips_sent_append(tmp_path, monkeypatch):
     assert RecordingBox.appended == []
 
 
+def test_settings_drafts_snippets_roundtrip(client):
+    assert client.get("/api/settings").json() == {"signatures": {}}
+    assert client.put("/api/settings", json={"signatures": {"demo": "-- \nAlex"}}).json() == {"ok": True}
+    assert client.get("/api/settings").json()["signatures"]["demo"] == "-- \nAlex"
+
+    draft = {"account": "demo", "to": ["a@b.de"], "cc": [], "bcc": [], "subject": "Hi", "body": "T", "mode": "new"}
+    draft_id = client.post("/api/drafts", json=draft).json()["id"]
+    client.post("/api/drafts", json={**draft, "id": draft_id, "subject": "Hi v2"})
+    drafts = client.get("/api/drafts", params={"account": "demo"}).json()
+    assert len(drafts) == 1 and drafts[0]["subject"] == "Hi v2"
+    assert client.delete(f"/api/drafts/{draft_id}").json() == {"ok": True}
+    assert client.delete(f"/api/drafts/{draft_id}").status_code == 404
+
+    assert client.put("/api/snippets", json=[{"abbrev": "g", "title": "Gruß", "text": "VG"}]).json() == {"ok": True}
+    assert client.get("/api/snippets").json()[0]["abbrev"] == "g"
+
+
+def test_contacts_endpoint(client):
+    client.post("/api/emilia/index", json={"account": "demo"})
+    results = client.get("/api/contacts", params={"q": "becker"}).json()
+    assert results and set(results[0]) == {"name", "addr"}
+
+
+def test_send_multipart_with_attachments_and_bcc(client):
+    import json as jsonlib
+
+    payload = {"account": "demo", "to": ["a@b.de"], "cc": [], "bcc": ["b@c.de"],
+               "subject": "Mit Anhang", "body": "Siehe Anhang"}
+    response = client.post(
+        "/api/send",
+        data={"payload": jsonlib.dumps(payload)},
+        files=[("files", ("bericht.pdf", b"%PDF-1.4 test", "application/pdf"))],
+    )
+    assert response.json()["ok"] is True
+    sent = client.get("/api/messages", params={"account": "demo", "folder": "Gesendet"}).json()
+    assert any(m["subject"] == "Mit Anhang" for m in sent)
+
+
+def test_send_multipart_size_limit(client):
+    import json as jsonlib
+
+    payload = {"account": "demo", "to": ["a@b.de"], "cc": [], "bcc": [], "subject": "Zu groß", "body": "x"}
+    big = b"x" * (26 * 1024 * 1024)
+    response = client.post(
+        "/api/send",
+        data={"payload": jsonlib.dumps(payload)},
+        files=[("files", ("riesig.bin", big, "application/octet-stream"))],
+    )
+    assert response.status_code == 413
+
+
+def test_send_forward_of_includes_original_attachments(client):
+    # uid 109 (Demo) hat "Rechnung Juli 39,95€.pdf" — Weiterleitung übernimmt sie serverseitig.
+    response = client.post(
+        "/api/send",
+        json={"account": "demo", "to": ["x@y.de"], "cc": [], "bcc": [],
+              "subject": "Fwd: Ihre Telekom Rechnung Juli 2026", "body": "Zur Info.",
+              "forward_of": {"folder": "INBOX", "uid": 109, "include_attachments": True}},
+    )
+    assert response.json()["ok"] is True
+    sent = client.get("/api/messages", params={"account": "demo", "folder": "Gesendet"}).json()
+    fwd = [m for m in sent if m["subject"].startswith("Fwd:")]
+    assert fwd
+
+
 def test_search(client):
     results = client.get("/api/search", params={"account": "demo", "q": "Rechnung", "folder": "INBOX"}).json()
     assert results
@@ -213,3 +278,51 @@ def test_unreachable_real_account_gives_502(tmp_path):
     response = client.get("/api/messages", params={"account": "tot", "folder": "INBOX"})
     assert response.status_code == 502
     assert "Verbindung" in response.json()["detail"]
+
+
+def test_forward_attachments_respect_size_limit(client, monkeypatch):
+    # Das 25-MB-Limit gilt für ALLE Anhänge — auch die serverseitig
+    # eingesammelten Original-Anhänge einer Weiterleitung.
+    import postfach.api as api_mod
+    monkeypatch.setattr(api_mod, "MAX_ATTACHMENT_TOTAL", 2)
+    r = client.post("/api/send", json={
+        "account": "demo", "to": ["a@b.de"], "subject": "Fwd: X", "body": "T",
+        "folder": "INBOX",
+        "forward_of": {"folder": "INBOX", "uid": 109, "include_attachments": True},
+    })
+    assert r.status_code == 413
+
+
+def test_send_multipart_ignores_plain_text_files_field(client):
+    # Ein multipart-Formfeld namens "files" ohne Datei darf keinen 500er auslösen.
+    r = client.post(
+        "/api/send",
+        data={"payload": '{"account":"demo","to":["a@b.de"],"subject":"Hi","body":"T"}'},
+        files=[("files", (None, "kein-upload"))],
+    )
+    assert r.status_code == 200
+
+
+def test_send_crlf_subject_does_not_crash_or_inject(client):
+    r = client.post("/api/send", json={
+        "account": "demo", "to": ["a@b.de"], "subject": "Hi\r\nBcc: evil@x.de", "body": "T",
+    })
+    assert r.status_code == 200
+    sent = client.get("/api/messages", params={"account": "demo", "folder": "Gesendet"}).json()
+    # Sanitisiert = einzeilig: der Injektionsversuch bleibt Text im Subject,
+    # wird aber nie eine eigene Header-Zeile.
+    [mail] = [m for m in sent if "evil" in (m.get("subject") or "")]
+    assert "\n" not in mail["subject"] and "\r" not in mail["subject"]
+
+
+def test_send_with_draft_id_deletes_draft_serverseitig(client):
+    draft_id = client.post("/api/drafts", json={
+        "account": "demo", "to": ["a@b.de"], "subject": "Hi", "body": "T",
+    }).json()["id"]
+    assert client.get("/api/drafts", params={"account": "demo"}).json()
+    r = client.post("/api/send", json={
+        "account": "demo", "to": ["a@b.de"], "subject": "Hi", "body": "T",
+        "draft_id": draft_id,
+    })
+    assert r.status_code == 200
+    assert client.get("/api/drafts", params={"account": "demo"}).json() == []

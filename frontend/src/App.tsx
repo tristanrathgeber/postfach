@@ -1,20 +1,31 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query'
-import type { Detail, MsgRef, Summary } from './lib/types'
+import { QueryClient, QueryClientProvider, useMutation, useQueryClient } from '@tanstack/react-query'
+import type { Detail, Draft, MsgRef, Snippet, Summary } from './lib/types'
+import { api, errText } from './lib/api'
 import { msgKey, refOf } from './lib/format'
 import { sortCategories } from './lib/categories'
 import { viewFolder, viewKey, viewTitle, type View } from './lib/view'
 import { createSequenceTracker, isEditableTarget, useGlobalKeydown } from './lib/keyboard'
-import { ALL_ACCOUNTS, useAccounts, useFolders, useMessagesAggregate, useSearchAggregate } from './hooks/useMailData'
+import {
+  ALL_ACCOUNTS,
+  useAccounts,
+  useDraftsAggregate,
+  useFolders,
+  useMessagesAggregate,
+  useSearchAggregate,
+} from './hooks/useMailData'
 import { useLiveEvents } from './hooks/useLiveEvents'
 import { useMailActions } from './hooks/useMailActions'
 import { AppShell } from './components/AppShell'
 import { Sidebar } from './components/Sidebar'
 import { MessageList } from './components/MessageList'
+import { DraftsList } from './components/DraftsList'
 import { Reader } from './components/Reader'
 import { Composer, type ComposerState } from './components/Composer'
+import { useSettings, useSnippets } from './hooks/useLocalStores'
 import { CommandPalette, type PaletteAction } from './components/CommandPalette'
 import { EmiliaPanel } from './components/EmiliaPanel'
+import { SettingsModal } from './components/SettingsModal'
 import { SparklesIcon } from './components/Icons'
 import { ToastProvider, useToast } from './components/Toast'
 
@@ -32,9 +43,15 @@ const queryClient = new QueryClient({
  * Zustands stehen. Die laufende Nummer remountet auch bei zweimal "Verfassen".
  */
 function composerKey({ id, state }: { id: number; state: ComposerState }): string {
-  return state.mode === 'reply'
-    ? `reply:${state.detail.account}:${state.detail.folder}:${state.detail.uid}`
-    : `new:${state.account}:${id}`
+  if (state.draft) return `draft:${state.draft.id}:${id}`
+  switch (state.mode) {
+    case 'reply':
+      return `reply:${state.detail.account}:${state.detail.folder}:${state.detail.uid}`
+    case 'forward':
+      return `forward:${state.detail.account}:${state.detail.folder}:${state.detail.uid}`
+    default:
+      return `new:${state.account}:${id}`
+  }
 }
 
 export default function App() {
@@ -58,14 +75,21 @@ function Postfach() {
   const [composer, setComposer] = useState<{ id: number; state: ComposerState } | null>(null)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [emiliaOpen, setEmiliaOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   // "Bilder laden" gilt nur für genau eine Nachricht (msgKey)
   const [imagesFor, setImagesFor] = useState<string | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const prevViewRef = useRef<View>({ kind: 'inbox' })
   const seqRef = useRef(createSequenceTracker())
   const composerSeq = useRef(0)
+  // Der offene Composer registriert hier seine "Snippet an Cursor einfügen"-Funktion (⌘K-Palette).
+  const snippetInsertRef = useRef<((snip: Snippet) => void) | null>(null)
+  // … und seine Persist-Funktion: Ersetzen (z. B. ⌘K → "Weiterleiten" bei
+  // offenem Composer) darf getippten Text nie stillschweigend wegwerfen.
+  const composerPersistRef = useRef<(() => void) | null>(null)
 
   const openComposer = useCallback((state: ComposerState) => {
+    composerPersistRef.current?.()
     composerSeq.current += 1
     setComposer({ id: composerSeq.current, state })
   }, [])
@@ -87,9 +111,13 @@ function Postfach() {
   const inboxAgg = useMessagesAggregate(accountNames, 'INBOX')
   const searchAgg = useSearchAggregate(accountNames, searchActive ? view.query : '', folder)
   const foldersQuery = useFolders(accountSel === ALL_ACCOUNTS ? null : accountSel)
+  const draftsAgg = useDraftsAggregate(accountNames)
+  const snippetsQuery = useSnippets()
+  const settingsQuery = useSettings()
   const actions = useMailActions()
 
   const visible = useMemo((): Summary[] => {
+    if (view.kind === 'drafts') return [] // Entwürfe-Ansicht hat eine eigene Liste + Tastatursteuerung
     if (view.kind === 'search') return searchAgg.messages
     if (view.kind === 'unread') return messagesAgg.messages.filter((m) => !m.seen)
     if (view.kind === 'category') return messagesAgg.messages.filter((m) => m.category === view.category)
@@ -194,6 +222,46 @@ function Postfach() {
     if (detail) openComposer({ mode: 'reply', detail })
   }, [opened, openComposer, qc])
 
+  const forwardOpened = useCallback(() => {
+    if (!opened) return
+    const detail = qc.getQueryData<Detail>(['message', opened.account, opened.folder, opened.uid])
+    if (detail) openComposer({ mode: 'forward', detail })
+  }, [opened, openComposer, qc])
+
+  // --- Entwürfe: Fortsetzen & Löschen ---
+  const openDraft = useCallback(
+    async (draft: Draft) => {
+      // Antwort-/Weiterleitungs-Entwürfe brauchen das Original als Kontext
+      // (Threading bzw. forward_of) — Detail nachladen, sonst als "neu" fortsetzen.
+      if (draft.mode !== 'new' && draft.ref_folder && draft.ref_uid !== undefined) {
+        try {
+          const detail = await qc.fetchQuery({
+            queryKey: ['message', draft.account, draft.ref_folder, draft.ref_uid],
+            queryFn: () => api.message(draft.account, draft.ref_uid!, draft.ref_folder),
+          })
+          if (draft.mode === 'reply') openComposer({ mode: 'reply', detail, draft })
+          else openComposer({ mode: 'forward', detail, draft })
+          return
+        } catch {
+          // Original nicht mehr ladbar → Text nicht verlieren, als neue Mail fortsetzen.
+          showToast('Original nicht mehr auffindbar — Entwurf ohne Threading/Anhänge fortgesetzt.', 'error')
+        }
+      }
+      openComposer({ mode: 'new', account: draft.account, draft })
+    },
+    [openComposer, qc, showToast],
+  )
+
+  const deleteDraftMutation = useMutation({
+    mutationFn: (draft: Draft) => api.deleteDraft(draft.id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['drafts'] })
+      showToast('Entwurf gelöscht.')
+    },
+    onError: (e) => showToast(`Entwurf nicht löschbar: ${errText(e)}`, 'error'),
+  })
+  const deleteDraft = deleteDraftMutation.mutate
+
   // --- Suche ---
   const submitSearch = useCallback(
     (q: string) => {
@@ -220,7 +288,7 @@ function Postfach() {
       setEmiliaOpen((v) => !v)
       return
     }
-    if (paletteOpen || composer) return // Palette/Composer behandeln Esc selbst
+    if (paletteOpen || composer || settingsOpen) return // Palette/Composer/Einstellungen behandeln Esc selbst
     if (e.key === 'Escape') {
       // Esc-Priorität: Palette > Composer > Emilia > Suche
       if (emiliaOpen) setEmiliaOpen(false)
@@ -255,6 +323,11 @@ function Postfach() {
         e.preventDefault()
         replyToOpened()
         break
+      case 'f':
+        // Nur wenn eine Nachricht geöffnet ist (analog zu r).
+        e.preventDefault()
+        forwardOpened()
+        break
       case 'c':
         e.preventDefault()
         composeNew()
@@ -278,6 +351,7 @@ function Postfach() {
     list.push({ id: 'verfassen', group: 'Aktionen', label: 'Verfassen', shortcut: 'c', run: composeNew })
     if (opened) {
       list.push({ id: 'antworten', group: 'Aktionen', label: 'Antworten', shortcut: 'r', run: replyToOpened })
+      list.push({ id: 'weiterleiten', group: 'Aktionen', label: 'Weiterleiten', shortcut: 'f', run: forwardOpened })
       const openedRef = opened
       list.push({ id: 'bilder', group: 'Aktionen', label: 'Bilder laden', run: () => setImagesFor(msgKey(openedRef)) })
     }
@@ -314,9 +388,30 @@ function Postfach() {
       keywords: ['assistent', 'ki', 'chat'],
       run: () => setEmiliaOpen((v) => !v),
     })
+    list.push({
+      id: 'einstellungen',
+      group: 'Aktionen',
+      label: 'Einstellungen',
+      keywords: ['signatur', 'snippets', 'settings'],
+      run: () => setSettingsOpen(true),
+    })
+
+    // Snippets an der Cursor-Position einfügen — nur sinnvoll bei offenem Composer.
+    if (composer) {
+      for (const s of snippetsQuery.data ?? []) {
+        list.push({
+          id: `snippet-${s.abbrev}`,
+          group: 'Snippets',
+          label: `Snippet: ${s.title || s.abbrev}`,
+          keywords: [s.abbrev, 'snippet', 'baustein'],
+          run: () => snippetInsertRef.current?.(s),
+        })
+      }
+    }
 
     list.push({ id: 'view-inbox', group: 'Ansichten', label: 'Inbox', shortcut: 'g i', run: () => setView({ kind: 'inbox' }) })
     list.push({ id: 'view-unread', group: 'Ansichten', label: 'Ungelesen', run: () => setView({ kind: 'unread' }) })
+    list.push({ id: 'view-drafts', group: 'Ansichten', label: 'Entwürfe', run: () => setView({ kind: 'drafts' }) })
     for (const c of categories) {
       list.push({
         id: `view-cat-${c.name}`,
@@ -338,7 +433,20 @@ function Postfach() {
       })
     }
     return list
-  }, [accounts, categories, composeNew, opened, removeMessage, replyToOpened, runSortieren, selectedMsg, toggleSeen])
+  }, [
+    accounts,
+    categories,
+    composeNew,
+    composer,
+    forwardOpened,
+    opened,
+    removeMessage,
+    replyToOpened,
+    runSortieren,
+    selectedMsg,
+    snippetsQuery.data,
+    toggleSeen,
+  ])
 
   // --- Onboarding / Leerzustände ---
   const emptyOverride = useMemo(() => {
@@ -392,10 +500,21 @@ function Postfach() {
             categories={categories}
             inboxCount={inboxAgg.messages.length}
             unreadCount={unreadCount}
+            draftsCount={draftsAgg.drafts.length}
             folders={foldersQuery.data ?? []}
+            onOpenSettings={() => setSettingsOpen(true)}
           />
         }
         list={
+          view.kind === 'drafts' ? (
+            <DraftsList
+              drafts={draftsAgg.drafts}
+              isLoading={draftsAgg.isLoading}
+              keysEnabled={!paletteOpen && !composer && !settingsOpen}
+              onOpen={openDraft}
+              onDelete={deleteDraft}
+            />
+          ) : (
           <MessageList
             title={viewTitle(view)}
             messages={visible}
@@ -419,6 +538,7 @@ function Postfach() {
             hasUnclassified={unclassified.length > 0}
             emptyOverride={emptyOverride}
           />
+          )
         }
         reader={
           <Reader
@@ -426,6 +546,7 @@ function Postfach() {
             imagesEnabled={imagesEnabled}
             onEnableImages={() => setImagesFor(opened ? msgKey(opened) : null)}
             onReply={(detail) => openComposer({ mode: 'reply', detail })}
+            onForward={(detail) => openComposer({ mode: 'forward', detail })}
             onArchive={(detail) => removeMessage(refOf(detail), 'archive')}
             onTrash={(detail) => removeMessage(refOf(detail), 'trash')}
             onToggleSeen={toggleSeen}
@@ -454,8 +575,18 @@ function Postfach() {
         </button>
       ) : null}
       {composer ? (
-        <Composer key={composerKey(composer)} state={composer.state} accounts={accounts} onClose={() => setComposer(null)} />
+        <Composer
+          key={composerKey(composer)}
+          state={composer.state}
+          accounts={accounts}
+          signatures={settingsQuery.data?.signatures ?? {}}
+          snippetInsertRef={snippetInsertRef}
+          persistRef={composerPersistRef}
+          modalAbove={settingsOpen}
+          onClose={() => setComposer(null)}
+        />
       ) : null}
+      {settingsOpen ? <SettingsModal accounts={accounts} onClose={() => setSettingsOpen(false)} /> : null}
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} actions={paletteActions} onSearch={submitSearch} />
     </>
   )

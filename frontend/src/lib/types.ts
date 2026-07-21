@@ -48,15 +48,25 @@ export type MessageAction = {
   folder: string
 }
 
+/** Weiterleitung: Server hängt die Original-Anhänge serverseitig an (kein Re-Upload). */
+export type ForwardOf = { folder: string; uid: number; include_attachments: boolean }
+
 export type SendRequest = {
   account: string
   to: string[]
   cc: string[]
+  bcc: string[]
   subject: string
   body: string
   reply_to_uid?: number
   folder?: string
+  forward_of?: ForwardOf
+  /** Serverseitig nach erfolgreichem Versand löschen (atomar gegen späte Auto-Saves). */
+  draft_id?: string
 }
+
+/** POST /api/send — warning: SMTP ok, aber Gesendet-Ablage fehlgeschlagen (NICHT erneut senden). */
+export type SendResponse = { ok: true; warning?: string }
 
 /** Referenz auf eine konkrete Nachricht (Konto + Ordner + UID). */
 export type MsgRef = { account: string; folder: string; uid: number }
@@ -92,3 +102,36 @@ export type EmiliaChatRequest = {
 export type EmiliaChatResponse = { reply: string; sources: EmiliaSource[] }
 
 export type EmiliaImproveMode = 'korrigieren' | 'verbessern'
+
+// --- Batch 1 „Schreiben komplett" (Nachtrag v0.3, eingefroren 2026-07-21) ---
+
+/** GET/PUT /api/settings — Signaturen pro Konto (Plain-Text). */
+export type Settings = { signatures: Record<string, string> }
+
+/** GET /api/contacts?q=&limit=8 — Ranking: Häufigkeit×Aktualität, Sent-Empfänger doppelt. */
+export type Contact = { name: string; addr: string }
+
+export type DraftMode = 'new' | 'reply' | 'forward'
+
+/** Lokaler Entwurf (data/drafts.json) — Auto-Save-Upsert über stabile id. */
+export type Draft = {
+  id: string
+  account: string
+  to: string[]
+  cc: string[]
+  bcc: string[]
+  subject: string
+  body: string
+  mode: DraftMode
+  ref_folder?: string
+  ref_uid?: number
+  /** Weiterleitung: Original-Anhänge mitsenden (Checkbox-Zustand überlebt Resume). */
+  include_attachments?: boolean
+  updated: string // ISO 8601, server-seitig gesetzt
+}
+
+/** POST /api/drafts — id optional; mit id = Upsert (Auto-Save), updated setzt der Server. */
+export type DraftUpsert = Omit<Draft, 'id' | 'updated'> & { id?: string }
+
+/** GET/PUT /api/snippets — Textbausteine, Auslösung ;kürzel+Tab bzw. ⌘K. */
+export type Snippet = { abbrev: string; title: string; text: string }

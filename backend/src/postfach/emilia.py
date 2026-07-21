@@ -7,7 +7,7 @@ keinerlei Zugriff auf Versand-, Verschiebe- oder Papierkorb-Pfade
 
 from __future__ import annotations
 
-from .mail_imap import ParsedMail
+from .mail_imap import ParsedMail, is_sent_folder
 from .memory import MailMemory
 
 EMILIA_GUARD = (
@@ -45,7 +45,7 @@ class EmiliaService:
 
     # --- Gedächtnis ---
 
-    def index_folder(self, account: str, mailbox, folder: str, limit: int = 10000) -> int:
+    def index_folder(self, account: str, mailbox, folder: str, limit: int = 10000, owner_addr: str = "") -> int:
         mails = mailbox.list_messages(folder, limit)
         entries = [
             {
@@ -56,15 +56,28 @@ class EmiliaService:
             for m in mails
         ]
         self._memory.upsert_many(entries)
+        # Kontakte ernten: Absender normal, Empfänger EIGENER Mails doppelt —
+        # Menschen, denen man selbst schreibt, sind die besten Autocomplete-Kandidaten.
+        # Die eigene Adresse ist nie ein Autocomplete-Kandidat.
+        is_sent = is_sent_folder(folder)
+        owner = owner_addr.strip().lower()
+        contacts: list[tuple[str, str, float, str]] = []
+        for m in mails:
+            if not is_sent and m.from_addr.lower() != owner:
+                contacts.append((m.from_name, m.from_addr, 1.0, m.date_iso))
+            for addr in (*m.to, *m.cc):
+                if addr.lower() != owner:
+                    contacts.append(("", addr, 2.0 if is_sent else 0.3, m.date_iso))
+        self._memory.upsert_contacts(contacts)
         return len(entries)
 
-    def index(self, account: str, mailbox) -> int:
+    def index(self, account: str, mailbox, owner_addr: str = "") -> int:
         total = 0
         for folder in mailbox.list_folders():
             leaf = folder.split("/")[-1].split(".")[-1].lower()
             if folder.lower() in _INDEX_SKIP or leaf in _INDEX_SKIP:
                 continue
-            total += self.index_folder(account, mailbox, folder)
+            total += self.index_folder(account, mailbox, folder, owner_addr=owner_addr)
         return total
 
     # --- Fähigkeiten ---

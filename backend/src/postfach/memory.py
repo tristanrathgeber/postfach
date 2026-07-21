@@ -87,9 +87,17 @@ class MailMemory:
                 "snippet TEXT, embedding TEXT,"
                 "PRIMARY KEY (account, folder, uid))"
             )
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS contacts ("
+                "addr TEXT PRIMARY KEY, name TEXT, weight REAL, last_seen TEXT)"
+            )
 
     def _connect(self) -> sqlite3.Connection:
-        return sqlite3.connect(self._path)
+        conn = sqlite3.connect(self._path)
+        # SQLites eingebautes LOWER() foldet nur ASCII — „MÜLLER" bliebe bei
+        # der Namenssuche unauffindbar. Pythons str.lower kann Unicode.
+        conn.create_function("lower", 1, lambda s: s.lower() if isinstance(s, str) else s)
+        return conn
 
     @staticmethod
     def _embed_text(entry: dict) -> str:
@@ -99,6 +107,11 @@ class MailMemory:
         return re.sub(r"[\x00-\x08\x0b-\x1f\x7f]", " ", text)[:1500]
 
     def upsert_many(self, entries: list[dict]) -> None:
+        # Mails sind unveränderlich — bereits indexierte UIDs überspringen,
+        # sonst rechnet jeder Push-/Re-Index dieselben Embeddings neu.
+        with self._lock, self._connect() as conn:
+            known = set(conn.execute("SELECT account, folder, uid FROM mails"))
+        entries = [e for e in entries if (e["account"], e["folder"], e["uid"]) not in known]
         if not entries:
             return
         embeddings = self._embedder.embed([self._embed_text(e) for e in entries])
@@ -123,6 +136,46 @@ class MailMemory:
         with self._connect() as conn:
             [(n,)] = conn.execute("SELECT COUNT(*) FROM mails")
         return n
+
+    # --- Kontakte (für Empfänger-Autocomplete) ---
+
+    _NOREPLY_RE = re.compile(
+        r"^(no[-_]?reply|do[-_]?not[-_]?reply|donotreply|newsletter|news|mailing"
+        r"|notifications?|updates?|info|mailer-daemon|postmaster|bounces?|daemon)[@.+\-_]",
+        re.I,
+    )
+
+    def upsert_contacts(self, entries: list[tuple[str, str, float, str]]) -> None:
+        """entries: (name, addr, gewicht, datum-iso). Gewicht kumuliert —
+        Empfänger eigener Mails zählen höher als Einmal-Absender."""
+        rows = []
+        for name, addr, weight, date in entries:
+            addr = addr.strip().lower()
+            if not addr or "@" not in addr or self._NOREPLY_RE.match(addr):
+                continue
+            rows.append((addr, name.strip(), weight, date))
+        if not rows:
+            return
+        with self._lock, self._connect() as conn:
+            conn.executemany(
+                "INSERT INTO contacts (addr, name, weight, last_seen) VALUES (?,?,?,?) "
+                "ON CONFLICT(addr) DO UPDATE SET "
+                "weight = weight + excluded.weight, "
+                "name = CASE WHEN excluded.name != '' THEN excluded.name ELSE contacts.name END, "
+                "last_seen = MAX(contacts.last_seen, excluded.last_seen)",
+                rows,
+            )
+
+    def search_contacts(self, query: str, limit: int = 8) -> list[dict]:
+        needle = f"%{query.strip().lower()}%"
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT name, addr FROM contacts "
+                "WHERE addr LIKE ? OR LOWER(name) LIKE ? "
+                "ORDER BY weight DESC, last_seen DESC LIMIT ?",
+                (needle, needle, limit),
+            ).fetchall()
+        return [{"name": name, "addr": addr} for name, addr in rows]
 
     def search(self, account: str, query: str, k: int = 6) -> list[dict]:
         """Hybrid: Cosine-Ähnlichkeit + lexikalischer Bonus für Worttreffer.

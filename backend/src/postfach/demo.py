@@ -106,12 +106,16 @@ class DemoMailbox:
     def exists(self, folder: str, uid: int) -> bool:
         return self.get_message(folder, uid) is not None
 
-    def get_attachment(self, folder: str, uid: int, index: int) -> AttachmentFile | None:
+    def get_attachment_files(self, folder: str, uid: int) -> list[AttachmentFile]:
         mail = self.get_message(folder, uid)
-        if mail is None or index >= len(mail.attachments):
-            return None
-        meta = mail.attachments[index]
-        return AttachmentFile(filename=meta.filename, content_type=meta.content_type, payload=_PDF)
+        return [
+            AttachmentFile(filename=meta.filename, content_type=meta.content_type, payload=_PDF)
+            for meta in (mail.attachments if mail else ())
+        ]
+
+    def get_attachment(self, folder: str, uid: int, index: int) -> AttachmentFile | None:
+        files = self.get_attachment_files(folder, uid)
+        return files[index] if index < len(files) else None
 
     def search(self, folder: str, query: str) -> list[ParsedMail]:
         needle = query.lower()

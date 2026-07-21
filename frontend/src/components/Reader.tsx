@@ -5,13 +5,14 @@ import { formatFullDate, formatSize } from '../lib/format'
 import { Chip } from './Chip'
 import { EmptyState } from './EmptyState'
 import { HtmlMailFrame } from './HtmlMailFrame'
-import { ArchiveIcon, DownloadIcon, MailIcon, MailOpenIcon, PaperclipIcon, ReplyIcon, TrashIcon } from './Icons'
+import { ArchiveIcon, DownloadIcon, ForwardIcon, MailIcon, MailOpenIcon, PaperclipIcon, ReplyIcon, TrashIcon } from './Icons'
 
 type ReaderProps = {
   opened: MsgRef | null
   imagesEnabled: boolean
   onEnableImages: () => void
   onReply: (detail: Detail) => void
+  onForward: (detail: Detail) => void
   onArchive: (detail: Detail) => void
   onTrash: (detail: Detail) => void
   onToggleSeen: (detail: Detail) => void
@@ -50,7 +51,7 @@ function AddressLine({ label, value }: { label: string; value: string }) {
   )
 }
 
-export function Reader({ opened, imagesEnabled, onEnableImages, onReply, onArchive, onTrash, onToggleSeen }: ReaderProps) {
+export function Reader({ opened, imagesEnabled, onEnableImages, onReply, onForward, onArchive, onTrash, onToggleSeen }: ReaderProps) {
   const detailQuery = useQuery({
     queryKey: ['message', opened?.account, opened?.folder, opened?.uid],
     queryFn: () => api.message(opened!.account, opened!.uid, opened!.folder),
@@ -111,6 +112,9 @@ export function Reader({ opened, imagesEnabled, onEnableImages, onReply, onArchi
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <ActionButton label="Antworten" hint="r" onClick={() => onReply(detail)}>
                 <ReplyIcon size={13} />
+              </ActionButton>
+              <ActionButton label="Weiterleiten" hint="f" onClick={() => onForward(detail)}>
+                <ForwardIcon size={13} />
               </ActionButton>
               <ActionButton label="Archivieren" hint="e" onClick={() => onArchive(detail)}>
                 <ArchiveIcon size={13} />

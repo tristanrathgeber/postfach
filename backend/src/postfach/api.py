@@ -8,6 +8,7 @@ Mailbox-Seiteneffekten (tests/test_safety.py).
 from __future__ import annotations
 
 import functools
+import json
 import re
 
 from typing import Literal
@@ -15,7 +16,8 @@ from typing import Literal
 import httpx
 from fastapi import APIRouter, HTTPException, Request, Response
 from imapclient.exceptions import IMAPClientError
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
+from starlette.concurrency import run_in_threadpool
 
 from email_agent.textutil import truncate
 
@@ -44,14 +46,28 @@ class DraftBody(BaseModel):
     uid: int
 
 
+class ForwardOf(BaseModel):
+    folder: str = "INBOX"
+    uid: int
+    include_attachments: bool = True
+
+
 class SendBody(BaseModel):
     account: str
     to: list[str]
     cc: list[str] = []
+    bcc: list[str] = []
     subject: str
     body: str
     reply_to_uid: int | None = None
     folder: str = "INBOX"
+    forward_of: ForwardOf | None = None
+    # Nach erfolgreichem Versand serverseitig löschen — atomar gegenüber
+    # spät eintreffenden Auto-Save-Upserts des Clients.
+    draft_id: str | None = None
+
+
+MAX_ATTACHMENT_TOTAL = 25 * 1024 * 1024  # 25 MB
 
 
 def _account(request: Request, name: str) -> MailAccount:
@@ -228,23 +244,62 @@ def draft(request: Request, body: DraftBody):
 
 
 @router.post("/send")
+async def send(request: Request):
+    """Nimmt JSON (ohne Dateien) ODER multipart (payload-Feld + files).
+    Der blockierende Mail-Teil läuft im Threadpool."""
+    attachments: list[tuple[str, str, bytes]] = []
+    content_type = request.headers.get("content-type", "")
+    try:
+        if content_type.startswith("multipart/"):
+            form = await request.form()
+            body = SendBody(**json.loads(str(form.get("payload") or "{}")))
+            total = 0
+            for upload in form.getlist("files"):
+                if not hasattr(upload, "read"):  # reines Textfeld namens "files"
+                    continue
+                payload = await upload.read()
+                total += len(payload)
+                if total > MAX_ATTACHMENT_TOTAL:
+                    raise HTTPException(413, "Anhänge zusammen größer als 25 MB.")
+                attachments.append(
+                    (upload.filename or "anhang", upload.content_type or "application/octet-stream", payload)
+                )
+        else:
+            body = SendBody(**await request.json())
+    except (ValidationError, json.JSONDecodeError) as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+    return await run_in_threadpool(_do_send, request, body, attachments)
+
+
 @_mailbox_errors
-def send(request: Request, body: SendBody):
+def _do_send(request: Request, body: SendBody, attachments: list[tuple[str, str, bytes]]):
     from .mail_send import build_outgoing
 
     acc = _account(request, body.account)
-    # Eine IMAP-Verbindung für Original-Fetch UND Sent-Ablage.
+    # Eine IMAP-Verbindung für Original-Fetch, Weiterleitungs-Anhänge UND Sent-Ablage.
     with request.app.state.open_mailbox(acc) as box:
         original = None
         if body.reply_to_uid is not None:
             original = box.get_message(body.folder, body.reply_to_uid)
+        if body.forward_of is not None and body.forward_of.include_attachments:
+            for file in box.get_attachment_files(body.forward_of.folder, body.forward_of.uid):
+                attachments.append((file.filename, file.content_type, file.payload))
+        # Das Limit gilt für die Gesamtheit — Upload-Dateien UND Original-Anhänge.
+        if sum(len(p) for _f, _t, p in attachments) > MAX_ATTACHMENT_TOTAL:
+            raise HTTPException(413, "Anhänge zusammen größer als 25 MB.")
         mime_bytes = build_outgoing(
             from_addr=acc.address, to=body.to, cc=body.cc,
             subject=body.subject, body=body.body,
             reply_to_original=original,
+            bcc=body.bcc, attachments=attachments,
         )
         # Im Demo-Modus ist smtp_send ein No-Op (Factory-Seam in app.py).
         request.app.state.smtp_send(acc, mime_bytes)
+        # Ab hier IST die Mail raus — der zugehörige Entwurf ist Geschichte,
+        # egal was die Sent-Ablage noch sagt.
+        if body.draft_id:
+            request.app.state.drafts.delete(body.draft_id)
         # Gmail legt via SMTP Gesendetes selbst ab — APPEND ergäbe Duplikate.
         if acc.provider != "gmail":
             try:
@@ -299,7 +354,7 @@ def emilia_improve(request: Request, body: EmiliaImproveBody):
 def emilia_index(request: Request, body: EmiliaIndexBody):
     acc = _account(request, body.account)
     with request.app.state.open_mailbox(acc) as box:
-        indexed = request.app.state.emilia.index(body.account, box)
+        indexed = request.app.state.emilia.index(body.account, box, owner_addr=acc.address)
     return {"indexed": indexed}
 
 
@@ -314,13 +369,83 @@ def emilia_status(request: Request):
     }
 
 
+# --- Batch 1: Einstellungen, Entwürfe, Snippets, Kontakte (lokale Stores) ---
+
+
+class DraftSaveBody(BaseModel):
+    id: str | None = None
+    account: str
+    to: list[str] = []
+    cc: list[str] = []
+    bcc: list[str] = []
+    subject: str = ""
+    body: str = ""
+    mode: Literal["new", "reply", "forward"] = "new"
+    ref_folder: str | None = None
+    ref_uid: int | None = None
+    include_attachments: bool = True  # Weiterleitung: Original-Anhänge mitsenden?
+
+
+class SettingsBody(BaseModel):
+    signatures: dict[str, str] = {}
+
+
+class SnippetItem(BaseModel):
+    abbrev: str
+    title: str = ""
+    text: str
+
+
+@router.get("/settings")
+def get_settings(request: Request):
+    return request.app.state.settings.get()
+
+
+@router.put("/settings")
+def put_settings(request: Request, body: SettingsBody):
+    request.app.state.settings.put(body.model_dump())
+    return {"ok": True}
+
+
+@router.get("/contacts")
+def contacts(request: Request, q: str, limit: int = 8):
+    return request.app.state.emilia_memory.search_contacts(q, limit=min(limit, 20))
+
+
+@router.get("/drafts")
+def list_drafts(request: Request, account: str):
+    return request.app.state.drafts.list(account)
+
+
+@router.post("/drafts")
+def upsert_draft(request: Request, body: DraftSaveBody):
+    return {"id": request.app.state.drafts.upsert(body.model_dump())}
+
+
+@router.delete("/drafts/{draft_id}")
+def delete_draft(request: Request, draft_id: str):
+    if not request.app.state.drafts.delete(draft_id):
+        raise HTTPException(404, "Entwurf nicht gefunden")
+    return {"ok": True}
+
+
+@router.get("/snippets")
+def get_snippets(request: Request):
+    return request.app.state.snippets.get()
+
+
+@router.put("/snippets")
+def put_snippets(request: Request, body: list[SnippetItem]):
+    request.app.state.snippets.put([i.model_dump() for i in body])
+    return {"ok": True}
+
+
 # --- Live-Push (SSE): meldet der App neue Mails aus dem IDLE-Watcher ---
 
 
 @router.get("/events")
 async def events(request: Request, once: int = 0):
     import asyncio
-    import json as jsonlib
 
     from fastapi.responses import StreamingResponse
 
@@ -340,7 +465,7 @@ async def events(request: Request, once: int = 0):
             now = state.snapshot()
             for account, version in now.items():
                 if version != last.get(account, 0):
-                    yield f"data: {jsonlib.dumps({'type': 'new_mail', 'account': account})}\n\n"
+                    yield f"data: {json.dumps({'type': 'new_mail', 'account': account})}\n\n"
             last = now
             if ticks % 12 == 0:
                 yield ": ping\n\n"  # Keepalive gegen Proxy-/Idle-Timeouts

@@ -3,6 +3,7 @@
 export type View =
   | { kind: 'inbox' }
   | { kind: 'unread' }
+  | { kind: 'drafts' }
   | { kind: 'category'; category: string }
   | { kind: 'folder'; folder: string }
   | { kind: 'search'; query: string; folder: string }
@@ -13,6 +14,8 @@ export function viewTitle(view: View): string {
       return 'Inbox'
     case 'unread':
       return 'Ungelesen'
+    case 'drafts':
+      return 'Entwürfe'
     case 'category':
       return view.category
     case 'folder':

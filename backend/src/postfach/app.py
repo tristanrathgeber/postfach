@@ -19,7 +19,7 @@ from .memory import FakeEmbedder, MailMemory, OllamaEmbedder
 from .watcher import LiveState, start_watcher_thread
 
 HOST = "127.0.0.1"
-PORT = 8722
+PORT = int(os.environ.get("POSTFACH_PORT", "8722"))
 
 _DEMO_ACCOUNT = MailAccount(
     name="demo", provider="imap", address="alex@demo.example",
@@ -46,10 +46,18 @@ def create_app(root: Path | None = None, demo: bool | None = None, mailbox_facto
     data_dir = root / "data"
     style_path = root / "config" / "style_profile.md"
 
-    app = FastAPI(title="Postfach", version="0.2.0")
+    from .stores import DraftStore, SettingsStore, SnippetStore
+
+    app = FastAPI(title="Postfach", version="0.3.0")
     app.state.config = cfg
     app.state.demo = demo
     app.state.live = LiveState()
+    # Demo und Echtbetrieb teilen data/ — Demo-Spielstände strikt trennen,
+    # damit Demo-Experimente nie echte Signaturen/Entwürfe/Snippets anfassen.
+    store_dir = data_dir / "demo" if demo else data_dir
+    app.state.settings = SettingsStore(store_dir / "settings.json")
+    app.state.drafts = DraftStore(store_dir / "drafts.json")
+    app.state.snippets = SnippetStore(store_dir / "snippets.json")
 
     if demo:
         app.state.accounts = {_DEMO_ACCOUNT.name: _DEMO_ACCOUNT}
@@ -125,7 +133,9 @@ def create_app(root: Path | None = None, demo: bool | None = None, mailbox_facto
                 # Neue Mails direkt in Emilias Gedächtnis aufnehmen (Best Effort).
                 account = app.state.accounts[account_name]
                 with open_mailbox(account) as box:
-                    app.state.emilia.index_folder(account_name, box, "INBOX", limit=10)
+                    app.state.emilia.index_folder(
+                        account_name, box, "INBOX", limit=10, owner_addr=account.address
+                    )
 
             def _watch_connect_for(account: MailAccount):
                 def connect():

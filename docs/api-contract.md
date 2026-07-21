@@ -69,3 +69,24 @@ type Classification = {
 Verhalten: `chat` antwortet deutsch, `sources` = die tatsächlich verwendeten Gedächtnis-Treffer
 (kann leer sein); `uid`/`folder` geben der Frage den Kontext der geöffneten Mail. `improve`
 gibt NUR den überarbeiteten Text zurück. `index` ist idempotent (aktualisiert Bestand).
+
+## Nachtrag v0.3 — Batch 1 „Schreiben komplett" (eingefroren 2026-07-21)
+
+| Methode & Pfad | Request | Response |
+|---|---|---|
+| `GET /api/settings` | — | `{"signatures":{"<konto>":string}}` |
+| `PUT /api/settings` | `{"signatures":{...}}` | `{"ok":true}` |
+| `GET /api/contacts?q=&limit=8` | — | `[{"name":string,"addr":string}]` (Ranking: Häufigkeit×Aktualität, Sent-Empfänger doppelt) |
+| `GET /api/drafts?account=` | — | `[Draft]` |
+| `POST /api/drafts` | Draft, `id` optional (mit id = **Upsert** fürs Auto-Save) | `{"id":string}` |
+| `DELETE /api/drafts/{id}` | — | `{"ok":true}` |
+| `GET /api/snippets` | — | `[{"abbrev","title","text"}]` |
+| `PUT /api/snippets` | `[items]` | `{"ok":true}` |
+
+`Draft = {id, account, to: string[], cc: string[], bcc: string[], subject, body,
+mode: "new"|"reply"|"forward", ref_folder?: string, ref_uid?: number, updated: iso}`
+
+**`POST /api/send` erweitert (JSON-Variante bleibt gültig):**
+- JSON-Body zusätzlich: `"bcc": string[]`, `"forward_of": {"folder","uid","include_attachments": bool}` (Server hängt Original-Anhänge an)
+- NEU multipart/form-data: Feld `payload` (obiges JSON als String) + `files` (0..n Anhänge, gesamt ≤ 25 MB → 413 bei Überschreitung)
+- Gesendet-Kopie behält Bcc-Header; SMTP-Versand entfernt ihn (Envelope korrekt)
