@@ -40,11 +40,11 @@ Leitplanken (gelten für jeden Batch):
 - [x] Konversationsleiste im Reader: chronologisch über ALLE Ordner inkl. Gesendet, klickbare Zeilen mit Ordner-Label, aktuelle hervorgehoben
 - [x] Faden-Triage (Archiv/Papierkorb — Gesendet-Kopien bleiben verschont) + (n)-Zähler in der Liste
 
-## Batch 5 — Zeit-Features (groß): Undo, Später, Snooze, Follow-up
-- [ ] **Undo-Send** (verzögertes Senden, konfigurierbar 10–30 s)
-- [ ] **Später senden** (lokale Warteschlange + Scheduler)
-- [ ] **Snooze auf Plain-IMAP** (lokale Wiedervorlage — laut Recherche echte Marktlücke: Gmail-Clients können es, IMAP-Clients nicht)
-- [ ] **Follow-up-Reminder** („erinnere mich, wenn keine Antwort in 3 Tagen")
+## Batch 5 — Zeit-Features (groß): Undo, Später, Snooze, Follow-up ✅ 2026-07-21
+- [x] **Undo-Send** (konfigurierbar 0–30 s, Default 15; Storno stellt den Entwurf garantiert wieder her)
+- [x] **Später senden** (lokale Warteschlange, neustartfest; Ansicht „Ausgang" mit Stornieren; 3×-Fehler-Deckel + Meldung)
+- [x] **Snooze auf Plain-IMAP** (Taste z / Reader-Menü; Ordner „Später", Rückkehr per Message-ID ungelesen in die Inbox — die Marktlücke ist zu)
+- [x] **Follow-up-Reminder** (beim Senden 3/7 Tage; löst sich still bei fremder Antwort im Faden, sonst Ansicht „Wiedervorlage" + Meldung)
 
 ## Batch 6 — Posteingangs-Hygiene: Abo-Manager + Screener
 - [ ] **Abo-Manager**: alle Newsletter als Liste (Absender, Frequenz) + **1-Klick-Abmelden** via List-Unsubscribe (parsen wir bereits!)

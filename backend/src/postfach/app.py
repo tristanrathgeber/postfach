@@ -64,6 +64,11 @@ def create_app(root: Path | None = None, demo: bool | None = None, mailbox_facto
 
     app.state.search = SearchIndex(store_dir / "search.db")
 
+    from .schedule import OutboxStore, Scheduler, ScheduleStore, start_scheduler_thread
+
+    app.state.schedule = ScheduleStore(store_dir / "schedule.json")
+    app.state.outbox = OutboxStore(store_dir / "outbox")
+
     if demo:
         app.state.accounts = {_DEMO_ACCOUNT.name: _DEMO_ACCOUNT}
         app.state.demo_mailbox = DemoMailbox()
@@ -177,6 +182,80 @@ def create_app(root: Path | None = None, demo: bool | None = None, mailbox_facto
                 start_watcher_thread(
                     account.name, _watch_connect_for(account), app.state.live, _index_new_mail
                 )
+
+    # --- Zeit-Warteschlange: Undo/Später-Sends, Snooze-Aufwachen, Follow-ups ---
+    from .api import SendBody, perform_send
+    from .mail_imap import is_sent_folder
+
+    def _notify(account_name: str | None, title: str, text: str) -> None:
+        if demo:  # Demo-Gespiele soll keine echten macOS-Meldungen werfen
+            return
+        # Pro-Konto-Einstellung respektieren; account=None = immer melden
+        # (Sendefehler dürfen nie still bleiben).
+        if account_name is not None and not app.state.settings.notifications_enabled(account_name):
+            return
+        from .notify import notify_macos
+
+        notify_macos(title, text)
+
+    def _run_send_job(job: dict) -> None:
+        loaded = app.state.outbox.load(job["id"])
+        if loaded is None:
+            return  # Storno-Rest — nichts zu tun
+        body_dict, attachments = loaded
+        # Wurde der Entwurf NACH dem Planen weiterbearbeitet, gehört er dem
+        # Nutzer — der Versand nimmt den eingefrorenen Stand, löscht aber nicht.
+        draft_id = body_dict.get("draft_id")
+        if draft_id:
+            drafts = {d["id"]: d for d in app.state.drafts.list(body_dict.get("account", ""))}
+            edited = drafts.get(draft_id)
+            if edited and edited.get("updated", "") > job.get("created", ""):
+                body_dict = {**body_dict, "draft_id": None}
+        result = perform_send(app.state, SendBody(**body_dict), attachments)
+        if result.get("warning"):
+            _notify(None, "Gesendet — mit Einschränkung", result["warning"])
+        app.state.live.bump(job["account"])  # UI: Ausgang/Gesendet auffrischen
+
+    def _wake_snooze(job: dict) -> None:
+        account = app.state.accounts[job["account"]]
+        message_id = job["payload"]["message_id"]
+        subject = job["payload"].get("subject", "")
+        with app.state.open_mailbox(account) as box:
+            uid = box.find_by_message_id(box.SNOOZE_FOLDER, message_id)
+            if uid is None:
+                _notify(job["account"], "Wiedervorlage", f"„{subject}“ ist nicht mehr im Später-Ordner")
+                return
+            # Erst ungelesen markieren, dann moven — Flags reisen mit,
+            # die neue UID im Ziel kennen wir nicht.
+            box.set_seen(box.SNOOZE_FOLDER, uid, False)
+            box.move(box.SNOOZE_FOLDER, uid, "INBOX")
+        app.state.live.bump(job["account"])
+        _notify(job["account"], "Wiedervorlage", subject or "Eine Mail ist zurück in der Inbox")
+
+    def _followup_answered(job: dict) -> bool:
+        payload = job["payload"]
+        account = app.state.accounts[job["account"]]
+        thread = app.state.search.thread(job["account"], payload.get("thread_root", ""))
+        sent_at = payload.get("sent_at", "")
+        from .schedule import is_later
+
+        return any(
+            is_later(m["date"], sent_at)
+            and not is_sent_folder(m["folder"])
+            and m["from_addr"].lower() != account.address.lower()
+            for m in thread
+        )
+
+    scheduler = Scheduler(
+        app.state.schedule, app.state.outbox,
+        send_fn=_run_send_job, wake_fn=_wake_snooze,
+        followup_fn=_followup_answered,
+        # Scheduler kennt keine Konten-Zuordnung → Fehler immer melden
+        notify_fn=lambda title, text: _notify(None, title, text),
+    )
+    app.state.scheduler = scheduler
+    if mailbox_factory is None:
+        start_scheduler_thread(scheduler)
 
     app.include_router(router, prefix="/api")
 

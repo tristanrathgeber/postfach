@@ -23,7 +23,10 @@ import { MessageList } from './components/MessageList'
 import { DraftsList } from './components/DraftsList'
 import { Reader } from './components/Reader'
 import { Composer, type ComposerState } from './components/Composer'
-import { useSearchReady, useSettings, useSnippets } from './hooks/useLocalStores'
+import { useOutboxAggregate, useRemindersAggregate, useSearchReady, useSettings, useSnippets } from './hooks/useLocalStores'
+import { OutboxList } from './components/OutboxList'
+import { RemindersList } from './components/RemindersList'
+import { timePresets } from './lib/times'
 import { CommandPalette, type PaletteAction } from './components/CommandPalette'
 import { EmiliaPanel } from './components/EmiliaPanel'
 import { SettingsModal } from './components/SettingsModal'
@@ -122,6 +125,8 @@ function Postfach() {
   const foldersQuery = useFolders(accountSel === ALL_ACCOUNTS ? null : accountSel)
   const draftsAgg = useDraftsAggregate(accountNames)
   const searchIndexReady = useSearchReady(accountNames, searchActive)
+  const outboxAgg = useOutboxAggregate(accountNames)
+  const remindersAgg = useRemindersAggregate(accountNames)
   const snippetsQuery = useSnippets()
   const settingsQuery = useSettings()
   const actions = useMailActions()
@@ -130,7 +135,7 @@ function Postfach() {
   const categoriesQuery = useQuery({ queryKey: ['categories'], queryFn: api.categories, staleTime: Infinity })
 
   const visible = useMemo((): Summary[] => {
-    if (view.kind === 'drafts') return [] // Entwürfe-Ansicht hat eine eigene Liste + Tastatursteuerung
+    if (view.kind === 'drafts' || view.kind === 'outbox' || view.kind === 'reminders') return [] // eigene Listen — keine Mail-Tastatur
     if (view.kind === 'search') return searchAgg.messages
     if (view.kind === 'unread') return messagesAgg.messages.filter((m) => !m.seen)
     if (view.kind === 'category') return messagesAgg.messages.filter((m) => m.category === view.category)
@@ -346,6 +351,45 @@ function Postfach() {
   })
   const deleteDraft = deleteDraftMutation.mutate
 
+  // --- Zeit-Features ---
+  const snoozeMutation = useMutation({
+    mutationFn: ({ ref, until }: { ref: MsgRef; until: string }) => api.snooze(ref, until),
+    onMutate: ({ ref }) => {
+      // Optimistisch aus den Listen — die Mail wandert in den Ordner „Später".
+      const removeRow = (old: Summary[] | undefined) => old?.filter((m) => !(m.account === ref.account && m.folder === ref.folder && m.uid === ref.uid))
+      qc.setQueriesData<Summary[]>({ queryKey: ['messages'] }, removeRow)
+      qc.setQueriesData<Summary[]>({ queryKey: ['search'] }, removeRow)
+    },
+    onSuccess: (_d, { ref, until }) => {
+      qc.invalidateQueries({ queryKey: ['reminders'] })
+      qc.invalidateQueries({ queryKey: ['messages', ref.account, ref.folder], refetchType: 'none' })
+      showToast(`Wiedervorlage: ${new Date(until).toLocaleString('de-DE', { weekday: 'short', hour: '2-digit', minute: '2-digit' })}`)
+      setOpened((cur) => (cur && msgKey(cur) === msgKey(ref) ? null : cur))
+    },
+    onError: (e, { ref }) => {
+      showToast(`Wiedervorlage fehlgeschlagen: ${errText(e)}`, 'error')
+      qc.invalidateQueries({ queryKey: ['messages', ref.account, ref.folder] })
+    },
+  })
+  const { mutate: snoozeMutate } = snoozeMutation
+  const snoozeMail = (ref: MsgRef, until: string) => snoozeMutate({ ref, until })
+
+  const cancelOutboxMutation = useMutation({
+    mutationFn: (id: string) => api.cancelOutbox(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['outbox'] })
+      qc.invalidateQueries({ queryKey: ['drafts'] })
+      showToast('Storniert — der Text liegt in den Entwürfen.')
+    },
+    onError: (e) => showToast(`Stornieren fehlgeschlagen: ${errText(e)}`, 'error'),
+  })
+
+  const reminderDoneMutation = useMutation({
+    mutationFn: (id: string) => api.reminderDone(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['reminders'] }),
+    onError: (e) => showToast(`Fehlgeschlagen: ${errText(e)}`, 'error'),
+  })
+
   // --- Suche ---
   const submitSearch = useCallback(
     (q: string) => {
@@ -408,6 +452,13 @@ function Postfach() {
       case '#':
         if (checked.size > 0) runBulk('trash')
         else if (selectedMsg) removeMessage(refOf(selectedMsg), 'trash')
+        break
+      case 'z':
+        if (selectedMsg) {
+          const presets = timePresets()
+          const preset = presets.find((p) => p.id === 'tomorrow') ?? presets[0]
+          snoozeMail(refOf(selectedMsg), preset.iso)
+        }
         break
       case '!':
         if (checked.size > 0) runBulk('spam')
@@ -579,6 +630,8 @@ function Postfach() {
     (account: string) => {
       qc.invalidateQueries({ queryKey: ['messages', account, 'INBOX'] })
       qc.invalidateQueries({ queryKey: ['emilia-status'] })
+      qc.invalidateQueries({ queryKey: ['outbox', account] })
+      qc.invalidateQueries({ queryKey: ['reminders', account] })
       showToast('Neue Mail eingetroffen.')
     },
     [qc, showToast],
@@ -621,13 +674,20 @@ function Postfach() {
             inboxCount={inboxAgg.messages.length}
             unreadCount={unreadCount}
             draftsCount={draftsAgg.drafts.length}
+            outboxCount={outboxAgg.entries.length}
+            remindersCount={remindersAgg.entries.length}
+            remindersDue={remindersAgg.dueCount}
             folders={foldersQuery.data ?? []}
             status={statusQuery.data?.accounts ?? {}}
             onOpenSettings={() => setSettingsOpen(true)}
           />
         }
         list={
-          view.kind === 'drafts' ? (
+          view.kind === 'outbox' ? (
+            <OutboxList entries={outboxAgg.entries} onCancel={(e) => cancelOutboxMutation.mutate(e.id)} />
+          ) : view.kind === 'reminders' ? (
+            <RemindersList entries={remindersAgg.entries} onDone={(r) => reminderDoneMutation.mutate(r.id)} />
+          ) : view.kind === 'drafts' ? (
             <DraftsList
               drafts={draftsAgg.drafts}
               isLoading={draftsAgg.isLoading}
@@ -678,6 +738,7 @@ function Postfach() {
             onTrash={(detail) => removeMessage(refOf(detail), 'trash')}
             onToggleSeen={toggleSeen}
             onToggleSpam={(detail, spam) => removeMessage(refOf(detail), spam ? 'spam' : 'unspam')}
+            onSnooze={(detail, until) => snoozeMail(refOf(detail), until)}
             categories={categoriesQuery.data ?? []}
             onChangeCategory={changeCategory}
             onOpenThreadMail={openMessage}

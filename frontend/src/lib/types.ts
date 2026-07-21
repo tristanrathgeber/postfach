@@ -65,10 +65,25 @@ export type SendRequest = {
   forward_of?: ForwardOf
   /** Serverseitig nach erfolgreichem Versand löschen (atomar gegen späte Auto-Saves). */
   draft_id?: string
+  /** Später senden (ISO) — überstimmt das Undo-Fenster. */
+  send_at?: string
+  /** Erinnern, falls bis dahin keine fremde Antwort im Faden auftaucht. */
+  followup_days?: number
 }
 
-/** POST /api/send — warning: SMTP ok, aber Gesendet-Ablage fehlgeschlagen (NICHT erneut senden). */
-export type SendResponse = { ok: true; warning?: string }
+/** POST /api/send — warning: SMTP ok, aber Gesendet-Ablage fehlgeschlagen (NICHT erneut senden).
+    scheduled: Versand wartet in der lokalen Warteschlange (Undo-Fenster oder Später senden). */
+export type SendResponse = {
+  ok: true
+  warning?: string
+  scheduled?: { id: string; due: string; kind: 'undo' | 'later' }
+}
+
+/** GET /api/outbox — geplante Sends. */
+export type OutboxEntry = { id: string; account: string; to: string[]; subject: string; due: string; kind: 'undo' | 'later' | 'failed' }
+
+/** GET /api/reminders — Wiedervorlagen (Snooze + Follow-up). */
+export type Reminder = { id: string; kind: 'snooze' | 'followup' | 'followup_due' | 'snooze_failed'; subject: string; due: string; info: string }
 
 /** Referenz auf eine konkrete Nachricht (Konto + Ordner + UID). */
 export type MsgRef = { account: string; folder: string; uid: number }
@@ -112,6 +127,8 @@ export type Settings = {
   signatures: Record<string, string>
   /** Benachrichtigungen pro Konto; fehlender Eintrag = an. */
   notifications: Record<string, boolean>
+  /** Undo-Fenster in Sekunden (0 = sofort senden). */
+  undo_seconds: number
 }
 
 /** GET .../thread — Faden-Mail: Summary + Server-Wissen über Gesendet-Kopien. */

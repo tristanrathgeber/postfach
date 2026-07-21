@@ -50,13 +50,14 @@ class _JsonFile:
 
 class SettingsStore(_JsonFile):
     def __init__(self, path: Path) -> None:
-        super().__init__(path, {"signatures": {}, "notifications": {}})
+        super().__init__(path, {"signatures": {}, "notifications": {}, "undo_seconds": 15})
 
     def get(self) -> dict:
         with self._lock:
             data = self._read()
         data.setdefault("signatures", {})
         data.setdefault("notifications", {})
+        data.setdefault("undo_seconds", 15)
         return data
 
     def put(self, data: dict) -> None:
@@ -69,6 +70,8 @@ class SettingsStore(_JsonFile):
             if data.get("notifications") is not None:
                 # Fehlender Konto-Eintrag = Benachrichtigungen an (Default)
                 current["notifications"] = {str(k): bool(v) for k, v in data["notifications"].items()}
+            if data.get("undo_seconds") is not None:
+                current["undo_seconds"] = max(0, min(int(data["undo_seconds"]), 60))
             self._write(current)
 
     def notifications_enabled(self, account: str) -> bool:
@@ -86,7 +89,7 @@ class DraftStore(_JsonFile):
         entry = {
             **draft,
             "id": draft_id,
-            "updated": datetime.now().isoformat(timespec="seconds"),
+            "updated": datetime.now().isoformat(),
         }
         with self._lock:
             drafts = [d for d in self._read() if d.get("id") != draft_id]

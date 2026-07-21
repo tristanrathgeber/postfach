@@ -25,6 +25,7 @@ export function SettingsModal({ accounts, onClose }: SettingsModalProps) {
         accounts={accounts}
         initialSignatures={settingsQuery.data.signatures}
         initialNotifications={settingsQuery.data.notifications}
+        initialUndoSeconds={settingsQuery.data.undo_seconds}
         initialSnippets={snippetsQuery.data}
         onClose={onClose}
       />
@@ -72,12 +73,14 @@ function SettingsForm({
   accounts,
   initialSignatures,
   initialNotifications,
+  initialUndoSeconds,
   initialSnippets,
   onClose,
 }: {
   accounts: Account[]
   initialSignatures: Record<string, string>
   initialNotifications: Record<string, boolean>
+  initialUndoSeconds: number
   initialSnippets: Snippet[]
   onClose: () => void
 }) {
@@ -85,6 +88,7 @@ function SettingsForm({
   const qc = useQueryClient()
   const [signatures, setSignatures] = useState<Record<string, string>>(initialSignatures)
   const [notifications, setNotifications] = useState<Record<string, boolean>>(initialNotifications)
+  const [undoSeconds, setUndoSeconds] = useState<number>(initialUndoSeconds)
   const [snippets, setSnippets] = useState<Snippet[]>(initialSnippets)
 
   const cleanedSnippets = snippets
@@ -93,13 +97,14 @@ function SettingsForm({
 
   const settingsDirty =
     JSON.stringify(signatures) !== JSON.stringify(initialSignatures) ||
-    JSON.stringify(notifications) !== JSON.stringify(initialNotifications)
+    JSON.stringify(notifications) !== JSON.stringify(initialNotifications) ||
+    undoSeconds !== initialUndoSeconds
   const snippetsDirty = JSON.stringify(cleanedSnippets) !== JSON.stringify(initialSnippets)
 
   const saveMutation = useMutation({
     mutationFn: () =>
       Promise.all([
-        settingsDirty ? api.putSettings({ signatures, notifications }) : Promise.resolve({ ok: true as const }),
+        settingsDirty ? api.putSettings({ signatures, notifications, undo_seconds: undoSeconds }) : Promise.resolve({ ok: true as const }),
         snippetsDirty ? api.putSnippets(cleanedSnippets) : Promise.resolve({ ok: true as const }),
       ]),
     onSuccess: () => {
@@ -194,6 +199,29 @@ function SettingsForm({
               </label>
             ))}
           </div>
+        </section>
+
+        {/* Senden */}
+        <section>
+          <h3 className="font-mono text-[9.5px] uppercase tracking-[0.1em] text-muted">Senden</h3>
+          <p className="mt-0.5 text-[11.5px] text-muted">
+            Rückgängig-Fenster: Mails gehen erst nach dieser Zeit wirklich raus.
+          </p>
+          <label className="mt-2 flex items-center gap-2 text-[13px]">
+            Rückgängig möglich für
+            <select
+              value={undoSeconds}
+              onChange={(e) => setUndoSeconds(Number(e.target.value))}
+              aria-label="Undo-Fenster"
+              className="rounded border border-hairline bg-paper px-2 py-1 text-[13px] focus:border-tinte focus:outline-none"
+            >
+              <option value={0}>aus — sofort senden</option>
+              <option value={10}>10 Sekunden</option>
+              <option value={15}>15 Sekunden</option>
+              <option value={20}>20 Sekunden</option>
+              <option value={30}>30 Sekunden</option>
+            </select>
+          </label>
         </section>
 
         {/* Snippets */}

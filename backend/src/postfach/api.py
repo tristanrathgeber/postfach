@@ -66,6 +66,10 @@ class SendBody(BaseModel):
     # Nach erfolgreichem Versand serverseitig löschen — atomar gegenüber
     # spät eintreffenden Auto-Save-Upserts des Clients.
     draft_id: str | None = None
+    # Später senden (ISO-Zeit) — überstimmt die Undo-Verzögerung.
+    send_at: str | None = None
+    # Erinnern, falls bis dahin keine fremde Antwort im Faden auftaucht.
+    followup_days: float | None = None
 
 
 MAX_ATTACHMENT_TOTAL = 25 * 1024 * 1024  # 25 MB
@@ -407,16 +411,50 @@ async def send(request: Request):
     except (ValidationError, json.JSONDecodeError) as exc:
         raise HTTPException(422, str(exc)) from exc
 
-    return await run_in_threadpool(_do_send, request, body, attachments)
+    return await run_in_threadpool(_send_or_schedule, request, body, attachments)
+
+
+def _send_or_schedule(request: Request, body: SendBody, attachments: list[tuple[str, str, bytes]]):
+    """Explizite Senden-Klicks landen entweder direkt im Versand oder — bei
+    Undo-Fenster/Später-senden — als Job in der lokalen Warteschlange."""
+    from datetime import datetime, timedelta
+
+    state = request.app.state
+    undo = state.settings.get()["undo_seconds"]
+    if body.send_at:
+        kind, due = "later", body.send_at
+    elif undo > 0:
+        kind, due = "undo", (datetime.now() + timedelta(seconds=undo)).isoformat(timespec="seconds")
+    else:
+        return _do_send(request, body, attachments)
+    try:
+        job_id = state.schedule.add(
+            "send", body.account, due,
+            {"subject": body.subject, "to": body.to, "kind": kind, "draft_id": body.draft_id},
+        )
+    except ValueError as exc:
+        raise HTTPException(422, f"Ungültige Zeitangabe: {exc}") from exc
+    state.outbox.save(job_id, body.model_dump(), attachments)
+    return {"ok": True, "scheduled": {"id": job_id, "due": due, "kind": kind}}
 
 
 @_mailbox_errors
 def _do_send(request: Request, body: SendBody, attachments: list[tuple[str, str, bytes]]):
+    return perform_send(request.app.state, body, attachments)
+
+
+def perform_send(state, body: SendBody, attachments: list[tuple[str, str, bytes]]):
+    """Der eigentliche Versand — auch der Scheduler (Undo/Später) ruft ihn.
+    `state` ist app.state (Scheduler-Jobs haben keinen Request)."""
+    from datetime import datetime, timedelta
+
     from .mail_send import build_outgoing
 
-    acc = _account(request, body.account)
+    acc = state.accounts.get(body.account)
+    if acc is None:
+        raise HTTPException(404, f"Unbekanntes Konto „{body.account}“")
     # Eine IMAP-Verbindung für Original-Fetch, Weiterleitungs-Anhänge UND Sent-Ablage.
-    with request.app.state.open_mailbox(acc) as box:
+    with state.open_mailbox(acc) as box:
         original = None
         if body.reply_to_uid is not None:
             original = box.get_message(body.folder, body.reply_to_uid)
@@ -426,18 +464,28 @@ def _do_send(request: Request, body: SendBody, attachments: list[tuple[str, str,
         # Das Limit gilt für die Gesamtheit — Upload-Dateien UND Original-Anhänge.
         if sum(len(p) for _f, _t, p in attachments) > MAX_ATTACHMENT_TOTAL:
             raise HTTPException(413, "Anhänge zusammen größer als 25 MB.")
-        mime_bytes = build_outgoing(
+        mime_bytes, message_id = build_outgoing(
             from_addr=acc.address, to=body.to, cc=body.cc,
             subject=body.subject, body=body.body,
             reply_to_original=original,
             bcc=body.bcc, attachments=attachments,
         )
         # Im Demo-Modus ist smtp_send ein No-Op (Factory-Seam in app.py).
-        request.app.state.smtp_send(acc, mime_bytes)
+        state.smtp_send(acc, mime_bytes)
         # Ab hier IST die Mail raus — der zugehörige Entwurf ist Geschichte,
         # egal was die Sent-Ablage noch sagt.
         if body.draft_id:
-            request.app.state.drafts.delete(body.draft_id)
+            state.drafts.delete(body.draft_id)
+        if body.followup_days:
+            # Wiedervorlage: Wurzel des Fadens merken — der Scheduler prüft
+            # später über den Thread-Index, ob eine fremde Antwort kam.
+            root = original and thread_root_for(original) or message_id
+            due = (datetime.now() + timedelta(days=body.followup_days)).isoformat(timespec="seconds")
+            state.schedule.add(
+                "followup", body.account, due,
+                {"subject": body.subject, "to": body.to, "thread_root": root,
+                 "sent_at": datetime.now().isoformat(timespec="seconds")},
+            )
         # Gmail legt via SMTP Gesendetes selbst ab — APPEND ergäbe Duplikate.
         if acc.provider != "gmail":
             try:
@@ -449,6 +497,105 @@ def _do_send(request: Request, body: SendBody, attachments: list[tuple[str, str,
                     "ok": True,
                     "warning": f"Gesendet — aber die Ablage im Gesendet-Ordner schlug fehl: {exc}",
                 }
+    return {"ok": True}
+
+
+# --- Zeit-Features: Ausgang, Snooze, Wiedervorlagen ---
+
+
+class SnoozeBody(BaseModel):
+    folder: str = "INBOX"
+    until: str
+
+
+@router.get("/outbox")
+def outbox_list(request: Request, account: str):
+    _account(request, account)
+    return [
+        {
+            "id": j["id"], "account": j["account"], "to": j["payload"].get("to", []),
+            "subject": j["payload"].get("subject", ""), "due": j["due"],
+            "kind": "failed" if j["kind"] == "send_failed" else j["payload"].get("kind", "later"),
+        }
+        for j in request.app.state.schedule.list(account)
+        if j["kind"] in ("send", "send_failed")
+    ]
+
+
+@router.delete("/outbox/{job_id}")
+def outbox_cancel(request: Request, job_id: str):
+    # Erst den Payload sichern: "dein Text liegt in den Entwürfen" muss IMMER
+    # stimmen — auch wenn der Auto-Save nie gefeuert hat (schneller Doppelklick).
+    loaded = request.app.state.outbox.load(job_id)
+    if not request.app.state.schedule.remove(job_id):
+        raise HTTPException(404, "Geplanter Versand nicht gefunden (schon gesendet?)")
+    if loaded is not None:
+        body = loaded[0]
+        request.app.state.drafts.upsert({
+            "id": body.get("draft_id") or None,
+            "account": body.get("account", ""), "to": body.get("to", []),
+            "cc": body.get("cc", []), "bcc": body.get("bcc", []),
+            "subject": body.get("subject", ""), "body": body.get("body", ""),
+            "mode": "new",
+        })
+    request.app.state.outbox.delete(job_id)
+    return {"ok": True}
+
+
+@router.post("/messages/{account}/{uid}/snooze")
+@_mailbox_errors
+def snooze(request: Request, account: str, uid: int, body: SnoozeBody):
+    """Mail bis <until> wegschlafen: in den Ordner „Später", Rückkehr per
+    Message-ID (UIDs überleben den Move nicht — Batch-4-Lektion)."""
+    acc = _account(request, account)
+    schedule = request.app.state.schedule
+    with request.app.state.open_mailbox(acc) as box:
+        mail = box.get_message(body.folder, uid)
+        if mail is None:
+            raise HTTPException(404, f"Mail {uid} nicht gefunden")
+        if not mail.message_id:
+            raise HTTPException(422, "Mail hat keine Message-ID — Wiedervorlage nicht möglich")
+        if body.folder != box.SNOOZE_FOLDER:
+            box.move(body.folder, uid, box.SNOOZE_FOLDER, ensure=True)
+    request.app.state.search.remove_mails(account, body.folder, [uid])
+    # Erneutes Snoozen (auch aus dem Später-Ordner): bestehenden Job umtiming
+    # statt Doppel-Jobs mit Geister-Meldungen zu stapeln.
+    existing = schedule.find_snooze(account, mail.message_id)
+    try:
+        if existing is not None:
+            from .schedule import _validate_due
+
+            existing["due"] = _validate_due(body.until)
+            schedule.update(existing)
+            return {"ok": True, "id": existing["id"]}
+        job_id = schedule.add(
+            "snooze", account, body.until,
+            {"message_id": mail.message_id, "subject": mail.subject},
+        )
+    except ValueError as exc:
+        raise HTTPException(422, f"Ungültige Zeitangabe: {exc}") from exc
+    return {"ok": True, "id": job_id}
+
+
+@router.get("/reminders")
+def reminders(request: Request, account: str):
+    _account(request, account)
+    kinds = ("snooze", "followup", "followup_due", "snooze_failed")
+    return [
+        {
+            "id": j["id"], "kind": j["kind"],
+            "subject": j["payload"].get("subject", ""), "due": j["due"],
+            "info": ", ".join(j["payload"].get("to", [])),
+        }
+        for j in request.app.state.schedule.list(account)
+        if j["kind"] in kinds
+    ]
+
+
+@router.post("/reminders/{job_id}/done")
+def reminder_done(request: Request, job_id: str):
+    if not request.app.state.schedule.remove(job_id):
+        raise HTTPException(404, "Wiedervorlage nicht gefunden")
     return {"ok": True}
 
 
@@ -545,6 +692,7 @@ class SettingsBody(BaseModel):
     # None = Sektion nicht anfassen (Teil-Update; Alt-Clients schicken nur signatures)
     signatures: dict[str, str] | None = None
     notifications: dict[str, bool] | None = None
+    undo_seconds: int | None = None
 
 
 class SnippetItem(BaseModel):

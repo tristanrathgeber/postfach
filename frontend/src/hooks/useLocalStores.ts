@@ -29,3 +29,32 @@ export function useSearchReady(accountNames: string[], enabled: boolean): boolea
     combine: (results) => enabled && results.length > 0 && results.every((r) => r.data?.ready === true),
   })
 }
+
+/** Geplante Sends aller Konten — der Scheduler räumt sie selbst ab (60-s-Poll). */
+export function useOutboxAggregate(accountNames: string[]) {
+  return useQueries({
+    queries: accountNames.map((name) => ({
+      queryKey: ['outbox', name],
+      queryFn: () => api.outbox(name),
+      refetchInterval: 60_000,
+    })),
+    combine: (results) => ({
+      entries: results.flatMap((r) => r.data ?? []).sort((a, b) => a.due.localeCompare(b.due)),
+    }),
+  })
+}
+
+/** Wiedervorlagen (Snooze + Follow-ups) aller Konten. */
+export function useRemindersAggregate(accountNames: string[]) {
+  return useQueries({
+    queries: accountNames.map((name) => ({
+      queryKey: ['reminders', name],
+      queryFn: () => api.reminders(name),
+      refetchInterval: 60_000,
+    })),
+    combine: (results) => {
+      const entries = results.flatMap((r) => r.data ?? []).sort((a, b) => a.due.localeCompare(b.due))
+      return { entries, dueCount: entries.filter((e) => e.kind === 'followup_due').length }
+    },
+  })
+}

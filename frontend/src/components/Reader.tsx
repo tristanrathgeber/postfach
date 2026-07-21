@@ -1,12 +1,14 @@
+import { useEffect, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api, errText } from '../lib/api'
 import type { Detail, MsgRef, ThreadMail } from '../lib/types'
 import { formatFullDate, formatListDate, formatSize } from '../lib/format'
+import { TimePresetMenu } from './TimePresetMenu'
 import { folderLeaf, isSpamFolder } from '../lib/folders'
 import { Chip } from './Chip'
 import { EmptyState } from './EmptyState'
 import { HtmlMailFrame } from './HtmlMailFrame'
-import { AlertIcon, ArchiveIcon, DownloadIcon, ForwardIcon, MailIcon, MailOpenIcon, PaperclipIcon, ReplyIcon, TrashIcon } from './Icons'
+import { AlertIcon, ArchiveIcon, ClockIcon, DownloadIcon, ForwardIcon, MailIcon, MailOpenIcon, PaperclipIcon, ReplyIcon, TrashIcon } from './Icons'
 
 type ReaderProps = {
   opened: MsgRef | null
@@ -19,6 +21,8 @@ type ReaderProps = {
   onToggleSeen: (detail: Detail) => void
   /** spam=true → in den Spam-Ordner; false → zurück in die Inbox. */
   onToggleSpam: (detail: Detail, spam: boolean) => void
+  /** Mail bis <iso> wegschlafen (Ordner „Später", Rückkehr ungelesen). */
+  onSnooze: (detail: Detail, until: string) => void
   /** Alle konfigurierten Kategorien fürs Korrektur-Menü. */
   categories: string[]
   onChangeCategory: (detail: Detail, category: string) => void
@@ -134,7 +138,9 @@ function ThreadRail({
   )
 }
 
-export function Reader({ opened, imagesEnabled, onEnableImages, onReply, onForward, onArchive, onTrash, onToggleSeen, onToggleSpam, categories, onChangeCategory, onOpenThreadMail, onThreadAction }: ReaderProps) {
+export function Reader({ opened, imagesEnabled, onEnableImages, onReply, onForward, onArchive, onTrash, onToggleSeen, onToggleSpam, onSnooze, categories, onChangeCategory, onOpenThreadMail, onThreadAction }: ReaderProps) {
+  const [snoozeOpen, setSnoozeOpen] = useState(false)
+  useEffect(() => setSnoozeOpen(false), [opened])
   const detailQuery = useQuery({
     queryKey: ['message', opened?.account, opened?.folder, opened?.uid],
     queryFn: () => api.message(opened!.account, opened!.uid, opened!.folder),
@@ -227,6 +233,22 @@ export function Reader({ opened, imagesEnabled, onEnableImages, onReply, onForwa
               <ActionButton label="Papierkorb" hint="#" onClick={() => onTrash(detail)}>
                 <TrashIcon size={13} />
               </ActionButton>
+              <div className="relative">
+                <ActionButton label="Später" hint="z" onClick={() => setSnoozeOpen((v) => !v)}>
+                  <ClockIcon size={13} />
+                </ActionButton>
+                {snoozeOpen ? (
+                  <TimePresetMenu
+                    heading="Wiedervorlage"
+                    placementClass="left-0 top-full mt-1"
+                    onPick={(iso) => {
+                      setSnoozeOpen(false)
+                      onSnooze(detail, iso)
+                    }}
+                    onClose={() => setSnoozeOpen(false)}
+                  />
+                ) : null}
+              </div>
               <ActionButton
                 label={isSpamFolder(detail.folder) ? 'Kein Spam' : 'Spam'}
                 hint="!"

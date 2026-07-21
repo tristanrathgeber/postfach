@@ -4,6 +4,9 @@
 // 4xx/5xx; Konto nicht erreichbar → 502.
 
 import type {
+  OutboxEntry,
+  Reminder,
+  MsgRef,
   ThreadMail,
   Account,
   Classification,
@@ -172,6 +175,22 @@ export const api = {
   /** GET /api/messages/{account}/{uid}/thread — Gesprächsfaden, kontoweit, chronologisch. */
   thread: (account: string, uid: number, folder: string): Promise<ThreadMail[]> =>
     request(`/messages/${enc(account)}/${uid}/thread?folder=${enc(folder)}`),
+
+  /** GET /api/outbox — geplante Sends (Undo-Fenster + Später senden). */
+  outbox: (account: string): Promise<OutboxEntry[]> => request(`/outbox?account=${enc(account)}`),
+
+  /** DELETE /api/outbox/{id} — Storno; der Auto-Save-Entwurf bleibt erhalten. */
+  cancelOutbox: (id: string): Promise<{ ok: true }> => request(`/outbox/${enc(id)}`, { method: 'DELETE' }),
+
+  /** POST .../snooze — Mail bis <until> in den Ordner „Später". */
+  snooze: (ref: MsgRef, until: string): Promise<{ ok: true; id: string }> =>
+    post(`/messages/${enc(ref.account)}/${ref.uid}/snooze`, { folder: ref.folder, until }),
+
+  /** GET /api/reminders — Wiedervorlagen (Snooze + Follow-ups). */
+  reminders: (account: string): Promise<Reminder[]> => request(`/reminders?account=${enc(account)}`),
+
+  /** POST /api/reminders/{id}/done */
+  reminderDone: (id: string): Promise<{ ok: true }> => post(`/reminders/${enc(id)}/done`, {}),
 
   /** GET /api/search/status — 0 = schnelle Suche noch nicht aufgebaut. */
   searchStatus: (account: string): Promise<{ indexed: number; ready: boolean }> =>

@@ -17,6 +17,9 @@ type SidebarProps = {
   inboxCount: number
   unreadCount: number
   draftsCount: number
+  outboxCount: number
+  remindersCount: number
+  remindersDue: number
   folders: string[]
   /** Watcher-Verbindungsstatus je Konto (leer, solange kein Watcher läuft — z. B. Demo). */
   status: Record<string, AccountStatus>
@@ -155,6 +158,9 @@ export function Sidebar({
   inboxCount,
   unreadCount,
   draftsCount,
+  outboxCount,
+  remindersCount,
+  remindersDue,
   folders,
   status,
   onOpenSettings,
@@ -234,6 +240,22 @@ export function Sidebar({
           active={sameView(view, { kind: 'drafts' })}
           onClick={() => onSelectView({ kind: 'drafts' })}
         />
+        {outboxCount > 0 ? (
+          <NavRow
+            label="Ausgang"
+            count={outboxCount}
+            active={sameView(view, { kind: 'outbox' })}
+            onClick={() => onSelectView({ kind: 'outbox' })}
+          />
+        ) : null}
+        {remindersCount > 0 ? (
+          <NavRow
+            label={remindersDue > 0 ? `Wiedervorlage — ${remindersDue} fällig` : 'Wiedervorlage'}
+            count={remindersCount}
+            active={sameView(view, { kind: 'reminders' })}
+            onClick={() => onSelectView({ kind: 'reminders' })}
+          />
+        ) : null}
 
         {categories.length > 0 ? (
           <>

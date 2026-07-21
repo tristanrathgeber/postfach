@@ -47,7 +47,7 @@ def test_build_outgoing_sets_recipients_and_reply_threading():
         message_id="<orig@example.com>",
         references="<a@x>",
     )
-    mime_bytes = build_outgoing(
+    mime_bytes, _mid = build_outgoing(
         from_addr="t@meinedomain.de",
         to=["alice@example.com"],
         cc=["bob@example.com"],
@@ -67,7 +67,7 @@ def test_build_outgoing_sets_recipients_and_reply_threading():
 def test_send_uses_starttls_on_587(monkeypatch):
     FakeSMTP.instances = []
     monkeypatch.setattr(mail_send.smtplib, "SMTP", FakeSMTP)
-    mime = build_outgoing("t@meinedomain.de", ["a@b.de"], [], "Hi", "Text")
+    mime, _mid = build_outgoing("t@meinedomain.de", ["a@b.de"], [], "Hi", "Text")
     send_mail(_account(587), "geheim", mime)
     [smtp] = FakeSMTP.instances
     assert smtp.port == 587
@@ -79,7 +79,7 @@ def test_send_uses_starttls_on_587(monkeypatch):
 def test_send_uses_ssl_on_465(monkeypatch):
     FakeSMTP.instances = []
     monkeypatch.setattr(mail_send.smtplib, "SMTP_SSL", FakeSMTP)
-    mime = build_outgoing("t@meinedomain.de", ["a@b.de"], [], "Hi", "Text")
+    mime, _mid = build_outgoing("t@meinedomain.de", ["a@b.de"], [], "Hi", "Text")
     send_mail(_account(465), "geheim", mime)
     [smtp] = FakeSMTP.instances
     assert smtp.port == 465
@@ -87,19 +87,19 @@ def test_send_uses_ssl_on_465(monkeypatch):
 
 
 def test_password_never_in_mime():
-    mime = build_outgoing("t@x.de", ["a@b.de"], [], "Hi", "Text")
+    mime, _mid = build_outgoing("t@x.de", ["a@b.de"], [], "Hi", "Text")
     assert b"geheim" not in mime
 
 
 def test_bcc_header_present_in_mime_for_sent_copy():
     # Die Gesendet-Kopie behält Bcc (smtplib entfernt ihn beim Versand selbst).
-    mime_bytes = build_outgoing("t@x.de", ["a@b.de"], [], "Hi", "Text", bcc=["geheim@c.de"])
+    mime_bytes, _mid = build_outgoing("t@x.de", ["a@b.de"], [], "Hi", "Text", bcc=["geheim@c.de"])
     parsed = message_from_bytes(mime_bytes, policy=default_policy)
     assert parsed["Bcc"] == "geheim@c.de"
 
 
 def test_attachments_are_added_with_filename_and_type():
-    mime_bytes = build_outgoing(
+    mime_bytes, _mid = build_outgoing(
         "t@x.de", ["a@b.de"], [], "Hi", "Text",
         attachments=[("bericht.pdf", "application/pdf", b"%PDF-1.4 daten"),
                      ("notiz.txt", "text/plain", "Inhalt äöü".encode())],
@@ -116,7 +116,7 @@ def test_attachments_are_added_with_filename_and_type():
 def test_crlf_in_headers_is_sanitized():
     # Untrusted Eingaben (auch Anhang-Namen fremder Mails) dürfen nie
     # Header-Injection auslösen — und nie einen 500er (ValueError) provozieren.
-    mime_bytes = build_outgoing(
+    mime_bytes, _mid = build_outgoing(
         "t@x.de", ["a@b.de\r\nCc: evil@x.de"], [], "Hi\r\nBcc: evil@x.de", "Text",
     )
     parsed = message_from_bytes(mime_bytes, policy=default_policy)
@@ -126,7 +126,7 @@ def test_crlf_in_headers_is_sanitized():
 
 
 def test_attachment_filename_crlf_sanitized():
-    mime_bytes = build_outgoing(
+    mime_bytes, _mid = build_outgoing(
         "t@x.de", ["a@b.de"], [], "Hi", "Text",
         attachments=[("bericht\r\nX-Evil: 1.pdf", "application/pdf", b"%PDF")],
     )
@@ -140,7 +140,7 @@ def test_send_strips_bcc_and_keeps_bcc_recipient_in_envelope(monkeypatch):
     # unabhängig davon, ob smtplib das implizit auch täte.
     FakeSMTP.instances = []
     monkeypatch.setattr(mail_send.smtplib, "SMTP", FakeSMTP)
-    mime = build_outgoing("t@x.de", ["a@b.de"], [], "Hi", "Text", bcc=["geheim@c.de"])
+    mime, _mid = build_outgoing("t@x.de", ["a@b.de"], [], "Hi", "Text", bcc=["geheim@c.de"])
     send_mail(_account(587), "pw", mime)
     [smtp] = FakeSMTP.instances
     [send_call] = [c for c in smtp.calls if isinstance(c, tuple) and c[0] == "send"]

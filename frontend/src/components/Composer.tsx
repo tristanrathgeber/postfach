@@ -5,6 +5,8 @@ import { useGlobalKeydown } from '../lib/keyboard'
 import { formatFullDate, formatSize } from '../lib/format'
 import { FIELD_INPUT, FIELD_LABEL } from '../lib/form'
 import { expandSnippet, matchAbbrev } from '../lib/snippets'
+import { formatDue } from '../lib/times'
+import { TimePresetMenu } from './TimePresetMenu'
 import { useSnippets } from '../hooks/useLocalStores'
 import type { Account, Contact, Detail, Draft, EmiliaImproveMode, Snippet } from '../lib/types'
 import { useToast } from './Toast'
@@ -93,6 +95,8 @@ export function Composer({
   const [touched, setTouched] = useState(false) // Nutzer hat inhaltlich editiert → Auto-Save aktiv
   const [sendError, setSendError] = useState<string | null>(null)
   const [armed, setArmed] = useState(false) // "Wirklich senden?"-Zweitklick
+  const [laterOpen, setLaterOpen] = useState(false) // "Später senden"-Menü
+  const [followupDays, setFollowupDays] = useState(0) // 0 = keine Erinnerung
   const [discardArmed, setDiscardArmed] = useState(false) // Esc bei ungespeichertem Text
   const armTimer = useRef<number | null>(null)
   const discardTimer = useRef<number | null>(null)
@@ -210,7 +214,7 @@ export function Composer({
   // Vor dem POST noch die Save-Kette abwarten, damit kein später ankommender
   // Auto-Save den Entwurf wieder anlegt.
   const sendMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async ({ sendAt }: { sendAt?: string } = {}) => {
       await (saveInFlightRef.current ?? Promise.resolve())
       const req = {
         account,
@@ -220,6 +224,8 @@ export function Composer({
         subject,
         body,
         draft_id: draftIdRef.current,
+        ...(sendAt ? { send_at: sendAt } : {}),
+        ...(followupDays > 0 ? { followup_days: followupDays } : {}),
         ...(reply ? { reply_to_uid: reply.uid, folder: reply.folder } : {}),
         ...(forward
           ? {
@@ -233,10 +239,29 @@ export function Composer({
       }
       return files.length > 0 ? api.sendWithAttachments(req, files) : api.send(req)
     },
-    onSuccess: ({ warning }) => {
+    onSuccess: ({ warning, scheduled }) => {
       savedRef.current = false
       qc.invalidateQueries({ queryKey: ['drafts'] })
-      showToast('Gesendet.')
+      qc.invalidateQueries({ queryKey: ['outbox'] })
+      if (scheduled) {
+        // Der Entwurf bleibt bis zum echten Versand — Storno verliert nichts.
+        const label = scheduled.kind === 'undo' ? 'Wird gesendet …' : `Geplant für ${formatDue(scheduled.due)}`
+        showToast(label, 'info', {
+          label: scheduled.kind === 'undo' ? 'Rückgängig' : 'Stornieren',
+          run: () => {
+            api
+              .cancelOutbox(scheduled.id)
+              .then(() => {
+                qc.invalidateQueries({ queryKey: ['outbox'] })
+                qc.invalidateQueries({ queryKey: ['drafts'] })
+                showToast('Storniert — der Text liegt in den Entwürfen.')
+              })
+              .catch(() => showToast('Zu spät — die Mail ist bereits gesendet.', 'error'))
+          },
+        })
+      } else {
+        showToast('Gesendet.')
+      }
       if (warning) showToast(warning, 'error') // SMTP ok, Ablage fehlgeschlagen — NICHT erneut senden
       onClose()
     },
@@ -299,8 +324,23 @@ export function Composer({
     setArmed(false)
     setSendError(null)
     sentRef.current = true
-    sendMutation.mutate()
+    sendMutation.mutate({})
   }, [armed, overLimit, sendMutation, to])
+
+  const sendLater = useCallback(
+    (sendAt: string) => {
+      if (sendMutation.isPending || overLimit) return
+      if (to.length === 0) {
+        setSendError('Mindestens ein Empfänger nötig.')
+        return
+      }
+      setLaterOpen(false)
+      setSendError(null)
+      sentRef.current = true
+      sendMutation.mutate({ sendAt })
+    },
+    [overLimit, sendMutation, to],
+  )
 
   // Schließen behält den Entwurf (Sicherheitsnetz) — außer er ist komplett leer.
   const persistAndClose = useCallback(() => {
@@ -665,6 +705,17 @@ export function Composer({
           >
             {improveMutation.isPending ? <SpinnerIcon size={12} /> : 'Verbessern'}
           </button>
+          <select
+            value={followupDays}
+            onChange={(e) => setFollowupDays(Number(e.target.value))}
+            title="Erinnern, falls keine Antwort kommt"
+            aria-label="Wiedervorlage"
+            className="rounded border border-hairline bg-surface px-1.5 py-1.5 text-[11.5px] text-muted focus:border-tinte focus:outline-none"
+          >
+            <option value={0}>Keine Erinnerung</option>
+            <option value={3}>Erinnern: 3 Tage</option>
+            <option value={7}>Erinnern: 1 Woche</option>
+          </select>
           <span className="flex-1" />
           {discardArmed ? (
             <span className="font-mono text-[10.5px] text-red-700">
@@ -673,16 +724,37 @@ export function Composer({
                 : 'Nochmal Esc: Schließen (Entwurf bleibt)'}
             </span>
           ) : null}
-          <button
-            type="button"
-            onClick={trySend}
-            disabled={sendMutation.isPending || overLimit}
-            className={`rounded px-3.5 py-1.5 text-[12.5px] font-medium text-white transition disabled:opacity-60 ${
-              armed ? 'bg-[#8C2F2F] hover:bg-[#7A2828]' : 'bg-tinte hover:bg-[#1D3494]'
-            }`}
-          >
-            {sendMutation.isPending ? 'Senden …' : armed ? 'Wirklich senden?' : 'Senden'}
-          </button>
+          <div className="relative flex">
+            <button
+              type="button"
+              onClick={trySend}
+              disabled={sendMutation.isPending || overLimit}
+              className={`rounded-l px-3.5 py-1.5 text-[12.5px] font-medium text-white transition disabled:opacity-60 ${
+                armed ? 'bg-[#8C2F2F] hover:bg-[#7A2828]' : 'bg-tinte hover:bg-[#1D3494]'
+              }`}
+            >
+              {sendMutation.isPending ? 'Senden …' : armed ? 'Wirklich senden?' : 'Senden'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setLaterOpen((v) => !v)}
+              disabled={sendMutation.isPending || overLimit}
+              title="Später senden"
+              aria-label="Später senden"
+              aria-expanded={laterOpen}
+              className="rounded-r border-l border-white/25 bg-tinte px-1.5 py-1.5 text-[11px] text-white transition hover:bg-[#1D3494] disabled:opacity-60"
+            >
+              ▾
+            </button>
+            {laterOpen ? (
+              <TimePresetMenu
+                heading="Später senden"
+                placementClass="bottom-full right-0 mb-1"
+                onPick={sendLater}
+                onClose={() => setLaterOpen(false)}
+              />
+            ) : null}
+          </div>
         </footer>
       </aside>
     </>

@@ -86,6 +86,10 @@ export function GearIcon(p: IconProps) {
   )
 }
 
+export function ClockIcon(p: IconProps) {
+  return <Svg {...p} paths={['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z', 'M12 6v6l4 2']} />
+}
+
 export function CheckIcon(p: IconProps) {
   return <Svg {...p} paths={['M4 12l5 5L20 6']} />
 }

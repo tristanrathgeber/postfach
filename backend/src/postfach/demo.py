@@ -165,6 +165,14 @@ class DemoMailbox:
     def junk_folder(self) -> str:
         return "Spam"
 
+    SNOOZE_FOLDER = "Später"
+
+    def find_by_message_id(self, folder: str, message_id: str) -> int | None:
+        for mail in self._folders.get(folder, []):
+            if mail.message_id == message_id:
+                return mail.uid
+        return None
+
     def append_sent(self, mime_bytes: bytes) -> None:
         msg = email.message_from_bytes(mime_bytes, policy=default_policy)
         self._next_uid += 1

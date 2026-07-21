@@ -294,6 +294,15 @@ class Mailbox:
     def junk_folder(self) -> str:
         return self._resolve(b"\\Junk", _JUNK_NAMES, "Spam")
 
+    SNOOZE_FOLDER = "Später"
+
+    def find_by_message_id(self, folder: str, message_id: str) -> int | None:
+        """UID einer Mail über die Message-ID — UIDs sind nach Moves wertlos,
+        die Message-ID bleibt (Snooze-Aufwachen)."""
+        self._client.select_folder(folder, readonly=True)
+        uids = self._client.search(["HEADER", "Message-ID", message_id])
+        return sorted(uids)[-1] if uids else None
+
     def archive_folder_default(self) -> str:
         return self._resolve(b"\\Archive", _ARCHIVE_NAMES, "Archive")
 

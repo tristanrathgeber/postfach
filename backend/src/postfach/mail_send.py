@@ -34,7 +34,7 @@ def build_outgoing(
     reply_to_original: ParsedMail | None = None,
     bcc: list[str] | None = None,
     attachments: list[tuple[str, str, bytes]] | None = None,
-) -> bytes:
+) -> tuple[bytes, str]:
     """Threading-Header (In-Reply-To/References) werden HIER abgeleitet —
     RFC-5322-Wissen gehört in die Mail-Schicht, nicht in Routen.
 
@@ -49,7 +49,8 @@ def build_outgoing(
     if bcc:
         mime["Bcc"] = _clean(", ".join(bcc))
     mime["Subject"] = _clean(subject)
-    mime["Message-ID"] = make_msgid()
+    message_id = make_msgid()
+    mime["Message-ID"] = message_id
     if reply_to_original is not None and reply_to_original.message_id:
         mime["In-Reply-To"] = reply_to_original.message_id
         mime["References"] = (
@@ -64,7 +65,7 @@ def build_outgoing(
             subtype=subtype or "octet-stream",
             filename=_clean(filename),
         )
-    return mime.as_bytes()
+    return mime.as_bytes(), message_id
 
 
 def send_mail(account: MailAccount, password: str, mime_bytes: bytes) -> None:

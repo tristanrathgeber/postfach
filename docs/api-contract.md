@@ -147,3 +147,20 @@ Betreff-Fallback nur beim Index-Lauf und nur bei eindeutigem Kandidaten.
 Thread-Triage läuft über die bestehende `POST /api/batch-action` mit den
 UIDs des Fadens (Client-seitig pro Ordner gruppiert; Gesendet-Kopien werden
 von der UI nicht angefasst).
+
+## Nachtrag v0.7 — Batch 5 „Zeit-Features" (eingefroren 2026-07-21)
+
+| Methode & Pfad | Request | Response |
+|---|---|---|
+| `POST /api/send` | zusätzlich `"send_at"?: iso` (Später senden), `"followup_days"?: number` (Erinnerung falls keine Antwort) | bei Undo-Verzögerung/send_at: `{"ok":true,"scheduled":{"id","due","kind":"undo"\|"later"}}`, sonst wie bisher |
+| `GET /api/outbox?account=` | — | `[{"id","account","to":[..],"subject","due","kind"}]` — geplante Sends |
+| `DELETE /api/outbox/{id}` | — | `{"ok":true}` — Storno; der Auto-Save-Entwurf bleibt erhalten |
+| `POST /api/messages/{account}/{uid}/snooze` | `{"folder","until": iso}` | `{"ok":true,"id"}` — Mail wandert in den Ordner „Später", kehrt zur Zeit ungelesen in die INBOX zurück (Wiederfinden per Message-ID, nicht UID) |
+| `GET /api/reminders?account=` | — | `[{"id","kind":"followup"\|"snooze","subject","due","info"}]` — anstehende Wiedervorlagen |
+| `POST /api/reminders/{id}/done` | — | `{"ok":true}` |
+| `GET/PUT /api/settings` | zusätzlich `"undo_seconds": number` (0 = sofort senden; Default 15) | — |
+
+Scheduler: lokale Warteschlange (data/schedule.json + data/outbox/), Tick 20 s,
+Jobs idempotent und neustartfest. Follow-up löscht sich still, wenn der
+Thread-Index eine fremde Antwort nach dem Versandzeitpunkt kennt.
+Sicherheits-Invariante: Nur explizite Senden-Klicks legen Send-Jobs an.

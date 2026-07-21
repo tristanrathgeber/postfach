@@ -11,7 +11,10 @@ SUMMARY_KEYS = {
 
 @pytest.fixture
 def client(tmp_path):
-    return TestClient(create_app(root=tmp_path, demo=True))
+    c = TestClient(create_app(root=tmp_path, demo=True))
+    # Direkt-Versand testen — das Undo-Fenster hat eigene Tests (test_schedule).
+    c.put("/api/settings", json={"undo_seconds": 0})
+    return c
 
 
 def test_accounts_contract(client):
@@ -153,7 +156,7 @@ def test_gmail_provider_skips_sent_append(tmp_path, monkeypatch):
 
 
 def test_settings_drafts_snippets_roundtrip(client):
-    assert client.get("/api/settings").json() == {"signatures": {}, "notifications": {}}
+    assert client.get("/api/settings").json() == {"signatures": {}, "notifications": {}, "undo_seconds": 0}
     assert client.put("/api/settings", json={"signatures": {"demo": "-- \nAlex"}}).json() == {"ok": True}
     assert client.get("/api/settings").json()["signatures"]["demo"] == "-- \nAlex"
 
