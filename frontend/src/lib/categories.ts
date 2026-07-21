@@ -1,23 +1,23 @@
-// Chip-Farben für die bekannten zehn Kategorien (email-agent-Taxonomie).
-// Unbekannte Kategorien fallen auf Grau zurück — die Liste selbst bleibt dynamisch.
+// Chip-Akzent je Kategorie (email-agent-Taxonomie) als CSS-Variable — der Chip
+// tönt Hintergrund UND Text daraus (color-mix), sodass die Farbe in BEIDEN
+// Themes stimmt. Unbekannte Kategorien fallen auf Grau zurück.
 
-const FALLBACK = 'bg-gray-100 text-gray-700'
-
-export const CHIP_STYLES: Record<string, string> = {
-  Newsletter: 'bg-slate-100 text-slate-700',
-  'Newsletter-Interessant': 'bg-sky-100 text-sky-700',
-  'Aktion-nötig': 'bg-red-100 text-red-700',
-  Rechnungen: 'bg-amber-100 text-amber-700',
-  Bestellungen: 'bg-orange-100 text-orange-700',
-  Entwicklung: 'bg-violet-100 text-violet-700',
-  Verein: 'bg-green-100 text-green-700',
-  Termine: 'bg-teal-100 text-teal-700',
-  Werbung: 'bg-pink-100 text-pink-700',
-  Sonstiges: FALLBACK,
+const CHIP_ACCENT: Record<string, string> = {
+  Newsletter: 'gray',
+  'Newsletter-Interessant': 'sky',
+  'Aktion-nötig': 'red',
+  Rechnungen: 'amber',
+  Bestellungen: 'orange',
+  Entwicklung: 'violet',
+  Verein: 'green',
+  Termine: 'teal',
+  Werbung: 'pink',
+  Sonstiges: 'gray',
 }
 
-export function chipStyle(category: string): string {
-  return CHIP_STYLES[category] ?? FALLBACK
+/** CSS-Variable des Kategorie-Akzents, z. B. `var(--chip-red)`. */
+export function chipColor(category: string): string {
+  return `var(--chip-${CHIP_ACCENT[category] ?? 'gray'})`
 }
 
 /** Sortierung der Kategorie-Ansichten in der Sidebar: bekannte zuerst in fester Reihenfolge, Rest alphabetisch. */

@@ -2,6 +2,8 @@ import { memo } from 'react'
 import type { Summary } from '../lib/types'
 import { formatListDate, msgKey } from '../lib/format'
 import { folderLeaf } from '../lib/folders'
+import { accountColor } from '../lib/accountColor'
+import type { Density } from '../hooks/usePreferences'
 import { Chip } from './Chip'
 import { ArchiveIcon, CheckIcon, MailIcon, MailOpenIcon, PaperclipIcon, TrashIcon } from './Icons'
 
@@ -13,6 +15,9 @@ type MessageRowProps = {
   anyChecked: boolean
   /** Suche liefert Treffer aus allen Ordnern — dann den Ordner zeigen. */
   showFolder?: boolean
+  /** In „Alle Konten": Herkunft per Farbpunkt zeigen. */
+  showAccountColor?: boolean
+  density?: Density
   onOpen: (msg: Summary) => void
   onArchive: (msg: Summary) => void
   onTrash: (msg: Summary) => void
@@ -39,7 +44,7 @@ function QuickAction({
         e.stopPropagation()
         onClick()
       }}
-      className="rounded p-1 text-muted transition hover:bg-[#F1EFEA] hover:text-ink"
+      className="rounded p-1 text-muted transition hover:bg-hover hover:text-ink"
     >
       {children}
     </button>
@@ -53,6 +58,8 @@ export const MessageRow = memo(function MessageRow({
   checked,
   anyChecked,
   showFolder = false,
+  showAccountColor = false,
+  density = 'comfortable',
   onOpen,
   onArchive,
   onTrash,
@@ -72,9 +79,9 @@ export const MessageRow = memo(function MessageRow({
         else if (anyChecked) onToggleCheck(msg, false)
         else onOpen(msg)
       }}
-      className={`row-enter group relative cursor-pointer border-b border-hairline px-4 py-2.5 transition ${
-        checked ? 'bg-[#E9EDFA]' : selected ? 'bg-[#EFF2FB]' : 'hover:bg-[#F8F7F4]'
-      }`}
+      className={`row-enter group relative cursor-pointer border-b border-hairline px-4 transition ${
+        density === 'compact' ? 'py-1.5' : 'py-2.5'
+      } ${checked ? 'bg-tint' : selected ? 'bg-tint' : 'hover:bg-hover'}`}
       style={{ animationDelay: `${Math.min(index, 15) * 22}ms` }}
     >
       {selected && !checked ? (
@@ -82,6 +89,14 @@ export const MessageRow = memo(function MessageRow({
       ) : null}
 
       <div className="flex items-center gap-1.5">
+        {showAccountColor ? (
+          <span
+            className="h-[10px] w-[3px] shrink-0 rounded-full"
+            style={{ background: accountColor(msg.account) }}
+            title={`Konto: ${msg.account}`}
+            aria-hidden="true"
+          />
+        ) : null}
         <button
           type="button"
           aria-label={checked ? 'Auswahl entfernen' : 'Auswählen'}
@@ -93,7 +108,7 @@ export const MessageRow = memo(function MessageRow({
           }}
           className={`flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded-full border transition ${
             checked
-              ? 'border-tinte bg-tinte text-white'
+              ? 'border-btn bg-btn text-white'
               : anyChecked
                 ? 'border-hairline bg-paper text-transparent hover:border-tinte'
                 : 'border-hairline bg-paper text-transparent opacity-0 hover:border-tinte group-hover:opacity-100'
@@ -112,7 +127,7 @@ export const MessageRow = memo(function MessageRow({
         </span>
         <span className="flex shrink-0 items-center gap-1.5 text-muted group-hover:invisible">
           {showFolder && msg.folder !== 'INBOX' ? (
-            <span className="max-w-[110px] truncate rounded bg-[#F1EFEA] px-1 font-mono text-[9.5px]">
+            <span className="max-w-[110px] truncate rounded bg-hover px-1 font-mono text-[9.5px]">
               {folderLeaf(msg.folder)}
             </span>
           ) : null}

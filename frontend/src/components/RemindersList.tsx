@@ -33,7 +33,7 @@ export function RemindersList({
           <EmptyState title="Alles im Fluss." subline="z schläfert Mails ein · Erinnerungen setzt du beim Senden" />
         ) : (
           sorted.map((e) => (
-            <div key={e.id} className={`border-b border-hairline px-4 py-2.5 ${urgent(e) ? 'bg-[#FBF3EC]' : ''}`}>
+            <div key={e.id} className={`border-b border-hairline px-4 py-2.5 ${urgent(e) ? 'bg-warm-bg' : ''}`}>
               <div className="flex items-center gap-2">
                 <span className="min-w-0 flex-1 truncate text-[13px]">{e.subject || '(Kein Betreff)'}</span>
                 <time className="shrink-0 font-mono text-[10.5px] text-muted">{formatDue(e.due)}</time>
@@ -41,7 +41,7 @@ export function RemindersList({
               <div className="mt-0.5 flex items-center gap-2">
                 <p className="min-w-0 flex-1 truncate text-[12px] text-muted">
                   {e.info ? `${e.info} · ` : ''}
-                  <span className={urgent(e) ? 'font-medium text-[#8C5A2F]' : ''}>{KIND_LABEL[e.kind]}</span>
+                  <span className={urgent(e) ? 'font-medium text-warm' : ''}>{KIND_LABEL[e.kind]}</span>
                 </p>
                 <button
                   type="button"

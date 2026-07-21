@@ -50,7 +50,7 @@ export function AboutDialog({ onClose }: { onClose: () => void }) {
           <ul className="mt-2 space-y-1.5 text-[12px]">
             {net?.targets.map((t) => (
               <li key={`${t.host}:${t.port}`} className="leading-snug">
-                <span className={`font-mono ${t.cloud ? 'text-red-800' : 'text-muted'}`}>
+                <span className={`font-mono ${t.cloud ? 'text-danger' : 'text-muted'}`}>
                   {t.host}:{t.port}
                 </span>
                 <span className="text-ink"> — {t.why}</span>
@@ -61,7 +61,7 @@ export function AboutDialog({ onClose }: { onClose: () => void }) {
             ) : null}
           </ul>
           {net?.cloud_llm ? (
-            <p className="mt-2 rounded bg-[#F6E8E4] px-2.5 py-1.5 text-[11.5px] text-red-800">
+            <p className="mt-2 rounded bg-danger-bg px-2.5 py-1.5 text-[11.5px] text-danger">
               KI-Cloud aktiv: Sortieren/Entwürfe schicken Mail-Inhalte an {net.cloud_llm.host}.
               Für rein lokal <span className="font-mono">sort_local</span> + <span className="font-mono">draft_local</span> aktivieren.
             </p>
@@ -81,7 +81,7 @@ export function AboutDialog({ onClose }: { onClose: () => void }) {
           </button>
           <span className="min-w-0 flex-1 text-[12px]">
             {checkMutation.isError ? (
-              <span className="text-red-700">Fehlgeschlagen: {errText(checkMutation.error)}</span>
+              <span className="text-danger">Fehlgeschlagen: {errText(checkMutation.error)}</span>
             ) : check?.update_available ? (
               <a
                 href="https://github.com/tristanrathgeber/postfach/releases/latest"

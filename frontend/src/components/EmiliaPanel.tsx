@@ -133,7 +133,7 @@ export function EmiliaPanel({
             type="button"
             onClick={() => indexMutation.mutate()}
             disabled={!account || indexMutation.isPending}
-            className="mt-2 flex items-center gap-1.5 rounded bg-tinte px-2.5 py-1.5 text-[12px] font-medium text-white transition hover:bg-[#1D3494] disabled:opacity-60"
+            className="mt-2 flex items-center gap-1.5 rounded bg-btn px-2.5 py-1.5 text-[12px] font-medium text-white transition hover:bg-btn-strong disabled:opacity-60"
           >
             {indexMutation.isPending ? <SpinnerIcon size={12} /> : <SparklesIcon size={12} />}
             {indexMutation.isPending ? 'Baue Gedächtnis …' : 'Gedächtnis aufbauen'}
@@ -154,7 +154,7 @@ export function EmiliaPanel({
           <div className="flex flex-col gap-3">
             {messages.map((m, i) =>
               m.role === 'user' ? (
-                <div key={i} className="ml-8 self-end rounded-lg bg-[#EBEEF9] px-3 py-2 text-[13px] leading-relaxed">
+                <div key={i} className="ml-8 self-end rounded-lg bg-tint px-3 py-2 text-[13px] leading-relaxed">
                   {m.text}
                 </div>
               ) : (

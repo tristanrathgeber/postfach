@@ -50,7 +50,7 @@ export function AccountsSection({ accounts }: { accounts: Account[] }) {
                   }
                 }}
                 className={`shrink-0 rounded border px-2 py-0.5 text-[11.5px] transition ${
-                  armed === a.name ? 'border-red-700 bg-red-700 text-white' : 'border-hairline text-muted hover:border-red-700 hover:text-red-800'
+                  armed === a.name ? 'border-red-700 bg-red-700 text-white' : 'border-hairline text-muted hover:border-danger hover:text-danger'
                 }`}
               >
                 {armed === a.name ? 'Wirklich entfernen?' : 'Entfernen'}

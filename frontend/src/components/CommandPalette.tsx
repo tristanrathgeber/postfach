@@ -24,7 +24,7 @@ const GROUP_CLASS =
 
 const ITEM_CLASS =
   'flex cursor-pointer items-center gap-2 rounded px-2.5 py-2 text-[13px] ' +
-  'data-[selected=true]:bg-[#EFF2FB] data-[selected=true]:text-tinte'
+  'data-[selected=true]:bg-tint data-[selected=true]:text-tinte'
 
 export function CommandPalette({ open, onClose, actions, onSearch }: CommandPaletteProps) {
   const [value, setValue] = useState('')

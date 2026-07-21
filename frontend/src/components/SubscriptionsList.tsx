@@ -80,7 +80,7 @@ export function SubscriptionsList({
                 </div>
                 <div className="mt-0.5 flex items-center gap-2">
                   <p className="min-w-0 flex-1 truncate font-mono text-[10.5px] text-muted">{s.addr}</p>
-                  <span className="shrink-0 rounded bg-[#F1EFEA] px-1 font-mono text-[9.5px] text-muted">
+                  <span className="shrink-0 rounded bg-hover px-1 font-mono text-[9.5px] text-muted">
                     {s.count} {s.count === 1 ? 'Mail' : 'Mails'} · {METHOD_LABEL[s.method]}
                   </span>
                   {done ? (

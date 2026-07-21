@@ -4,9 +4,9 @@ import { CheckIcon, ClockIcon, SpinnerIcon, XIcon } from './Icons'
 
 // Statische Klassen (Tailwind kann keine dynamisch zusammengesetzten scannen).
 const RESPONSE_HOVER: Record<InviteResponse, string> = {
-  accepted: 'hover:border-green-700 hover:text-green-800',
+  accepted: 'hover:border-success hover:text-success',
   tentative: 'hover:border-tinte hover:text-tinte',
-  declined: 'hover:border-red-700 hover:text-red-800',
+  declined: 'hover:border-danger hover:text-danger',
 }
 const RESPONSE_LABEL: Record<InviteResponse, string> = {
   accepted: 'Zugesagt',
@@ -28,7 +28,7 @@ export function InviteCard({
   onRespond: (response: InviteResponse) => void
 }) {
   return (
-    <section className="mt-4 rounded-lg border border-tinte/40 bg-[#F3F5FC] px-4 py-3" aria-label="Einladung">
+    <section className="mt-4 rounded-lg border border-tinte/40 bg-tint px-4 py-3" aria-label="Einladung">
       <div className="flex items-center gap-2">
         <ClockIcon size={13} className="text-tinte" />
         <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-tinte">Einladung</span>
@@ -44,7 +44,7 @@ export function InviteCard({
 
       {answered ? (
         <p className="mt-2.5 inline-flex items-center gap-1 rounded border border-hairline bg-surface px-2 py-1 text-[12px] text-ink">
-          <CheckIcon size={12} className="text-green-700" />
+          <CheckIcon size={12} className="text-success" />
           {RESPONSE_LABEL[answered]} — Antwort gesendet
         </p>
       ) : (

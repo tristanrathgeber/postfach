@@ -3,14 +3,81 @@
 @tailwind utilities;
 
 :root {
-  /* "Schreibtisch" — warmes Papier, Tinte, Haarlinien */
+  /* "Schreibtisch" — warmes Papier, Tinte, Haarlinien (Light) */
   --paper: #faf9f6;
   --surface: #ffffff;
   --ink: #1a1917;
   --muted: #6f6a61;
   --hairline: #e8e5df;
   --tinte: #2440b3;
+  --tinte-strong: #1d3494;
+  --btn: #2440b3;
+  --btn-strong: #1d3494;
+  --btn-ink: #ffffff;
   --unread: #b45309;
+  --hover: #f1efea;
+  --tint: #ebeef9;
+  --danger: #b4483c;
+  --danger-bg: #f6e8e4;
+  --success: #4c8a55;
+  --success-bg: #e9efe6;
+  --warm: #8c5a2f;
+  --warm-bg: #fbf3ec;
+  /* Kategorie-Chip-Akzente (Light) — BG wird per color-mix daraus getönt. */
+  --chip-gray: #4b5563; --chip-sky: #0369a1; --chip-red: #b91c1c; --chip-amber: #b45309;
+  --chip-orange: #c2410c; --chip-violet: #6d28d9; --chip-green: #15803d; --chip-teal: #0f766e; --chip-pink: #be185d;
+  /* Mail-Bogen: bleibt IMMER hell — E-Mails sind für Weiß gestaltet. */
+  --mail-paper: #ffffff;
+  --mail-ink: #1a1917;
+}
+
+/* "Nachttisch" — warme dunkle Töne, kein kaltes Schwarz, Tinte aufgehellt.
+   Systemwunsch als Default; der Theme-Umschalter setzt data-theme und gewinnt. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #1b1a17;
+    --surface: #232220;
+    --ink: #e8e5dc;
+    --muted: #979283;
+    --hairline: #37352f;
+    --tinte: #9baaec;
+    --tinte-strong: #b3c0f0;
+    --btn: #4257c4;
+    --btn-strong: #5568d4;
+    --btn-ink: #ffffff;
+    --unread: #e0a063;
+    --hover: #2c2a26;
+    --tint: #2a2e3d;
+    --danger: #e08a7e;
+    --danger-bg: #3a2320;
+    --success: #8fbf97;
+    --success-bg: #202a22;
+    --warm: #cba06b;
+    --warm-bg: #2e2620;
+    --chip-gray: #a6adba; --chip-sky: #6cb6e0; --chip-red: #e8938a; --chip-amber: #d3a562;
+    --chip-orange: #dd9a6b; --chip-violet: #b6a0e6; --chip-green: #86c28f; --chip-teal: #6cbdb2; --chip-pink: #e090b4;
+  }
+}
+
+:root[data-theme='light'] {
+  --paper: #faf9f6; --surface: #ffffff; --ink: #1a1917; --muted: #6f6a61;
+  --hairline: #e8e5df; --tinte: #2440b3; --tinte-strong: #1d3494; --unread: #b45309;
+  --btn: #2440b3; --btn-strong: #1d3494; --btn-ink: #ffffff;
+  --hover: #f1efea; --tint: #ebeef9; --danger: #b4483c; --danger-bg: #f6e8e4;
+  --success: #4c8a55; --success-bg: #e9efe6; --warm: #8c5a2f; --warm-bg: #fbf3ec;
+  /* Kategorie-Chip-Akzente (Light) — BG wird per color-mix daraus getönt. */
+  --chip-gray: #4b5563; --chip-sky: #0369a1; --chip-red: #b91c1c; --chip-amber: #b45309;
+  --chip-orange: #c2410c; --chip-violet: #6d28d9; --chip-green: #15803d; --chip-teal: #0f766e; --chip-pink: #be185d;
+}
+
+:root[data-theme='dark'] {
+  --paper: #1b1a17; --surface: #232220; --ink: #e8e5dc; --muted: #979283;
+  --hairline: #37352f; --tinte: #9baaec; --tinte-strong: #b3c0f0; --unread: #e0a063;
+  --btn: #4257c4; --btn-strong: #5568d4; --btn-ink: #ffffff;
+  --hover: #2c2a26; --tint: #2a2e3d; --danger: #e08a7e; --danger-bg: #3a2320;
+  --success: #8fbf97; --success-bg: #202a22; --warm: #cba06b; --warm-bg: #2e2620;
+  --chip-gray: #a6adba; --chip-sky: #6cb6e0; --chip-red: #e8938a; --chip-amber: #d3a562;
+  --chip-orange: #dd9a6b; --chip-violet: #b6a0e6; --chip-green: #86c28f; --chip-teal: #6cbdb2; --chip-pink: #e090b4;
 }
 
 html,
@@ -34,6 +101,17 @@ body {
 }
 
 ::selection {
+  background: rgba(36, 64, 179, 0.14);
+}
+@media (prefers-color-scheme: dark) {
+  ::selection {
+    background: rgba(155, 170, 236, 0.28);
+  }
+}
+:root[data-theme='dark'] ::selection {
+  background: rgba(155, 170, 236, 0.28);
+}
+:root[data-theme='light'] ::selection {
   background: rgba(36, 64, 179, 0.14);
 }
 
@@ -95,4 +173,24 @@ body {
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--hairline) transparent;
+}
+
+/* Der Mail-Bogen bleibt in JEDEM Theme hell — E-Mails sind für Weiß gestaltet,
+   Invertieren zerstört Layout/Kontrast, Bilder dürfen nie invertiert werden. */
+.mail-paper {
+  background: var(--mail-paper);
+  color: var(--mail-ink);
+  color-scheme: light;
+}
+
+/* Ruhewunsch respektieren: keine Bewegung, nur Einblenden ohne Versatz. */
+@media (prefers-reduced-motion: reduce) {
+  .row-enter,
+  .fade-in,
+  .slide-in-right {
+    animation: none;
+  }
+  * {
+    scroll-behavior: auto !important;
+  }
 }

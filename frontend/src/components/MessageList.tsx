@@ -13,6 +13,8 @@ type MessageListProps = {
   listKey: string
   selectedKey: string | null
   searchActive: boolean
+  multiAccount?: boolean
+  density?: import('../hooks/usePreferences').Density
   /** false: der Volltext-Index fehlt noch — es wurde nur der Ordner durchsucht. */
   searchIndexReady: boolean
   activeQuery: string
@@ -61,7 +63,7 @@ function BulkButton({ title, onClick, children }: { title: string; onClick: () =
       title={title}
       aria-label={title}
       onClick={onClick}
-      className="rounded p-1 text-tinte transition hover:bg-[#DFE5F7]"
+      className="rounded p-1 text-tinte transition hover:bg-tint"
     >
       {children}
     </button>
@@ -76,6 +78,8 @@ export function MessageList({
   listKey,
   selectedKey,
   searchActive,
+  multiAccount = false,
+  density = 'comfortable',
   searchIndexReady,
   activeQuery,
   nlQuery = null,
@@ -180,7 +184,7 @@ export function MessageList({
 
       {/* Bulk-Triage: erscheint, sobald etwas ausgewählt ist */}
       {checked.size > 0 ? (
-        <div className="flex items-center gap-1 border-b border-hairline bg-[#EFF2FB] px-3 py-1.5">
+        <div className="flex items-center gap-1 border-b border-hairline bg-tint px-3 py-1.5">
           <span className="font-mono text-[11px] text-tinte">{checked.size} ausgewählt</span>
           <span className="flex-1" />
           <BulkButton title="Archivieren (e)" onClick={() => onBulk('archive')}>
@@ -203,7 +207,7 @@ export function MessageList({
 
       {/* Konto-Fehler (z. B. 502 — Konto nicht erreichbar); übrige Konten laufen weiter */}
       {failures.map((account) => (
-        <div key={account} className="border-b border-red-300 bg-red-50 px-4 py-1.5 text-[12px] text-red-700">
+        <div key={account} className="border-b border-danger/50 bg-danger-bg px-4 py-1.5 text-[12px] text-danger">
           {failureDetail ? `${account}: ${failureDetail}` : `Konto ${account} nicht erreichbar`}
         </div>
       ))}
@@ -230,6 +234,8 @@ export function MessageList({
               checked={checked.has(msgKey(m))}
               anyChecked={checked.size > 0}
               showFolder={searchActive}
+              showAccountColor={multiAccount}
+              density={density}
               onOpen={onOpen}
               onArchive={onArchive}
               onTrash={onTrash}

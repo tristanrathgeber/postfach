@@ -164,11 +164,11 @@ export function AddAccountDialog({ onClose }: { onClose: () => void }) {
 
           {testResult ? (
             'demo' in testResult ? (
-              <p className="rounded bg-[#EBEEF9] px-3 py-2 text-[12.5px] text-tinte">Demo-Modus: Verbindungstest übersprungen.</p>
+              <p className="rounded bg-tint px-3 py-2 text-[12.5px] text-tinte">Demo-Modus: Verbindungstest übersprungen.</p>
             ) : testResult.ok ? (
-              <p className="rounded bg-[#E9EFE6] px-3 py-2 text-[12.5px] text-green-900">Verbindung erfolgreich — IMAP und SMTP erreichbar.</p>
+              <p className="rounded bg-success-bg px-3 py-2 text-[12.5px] text-success">Verbindung erfolgreich — IMAP und SMTP erreichbar.</p>
             ) : (
-              <p className="rounded bg-[#F6E8E4] px-3 py-2 text-[12.5px] text-red-800">
+              <p className="rounded bg-danger-bg px-3 py-2 text-[12.5px] text-danger">
                 {testResult.imap ? 'SMTP' : 'IMAP'} fehlgeschlagen{testResult.error ? `: ${testResult.error}` : ''}
               </p>
             )
@@ -194,7 +194,7 @@ export function AddAccountDialog({ onClose }: { onClose: () => void }) {
             onClick={() => addMutation.mutate()}
             disabled={!canSubmit || !testOk || addMutation.isPending}
             title={testOk ? 'Konto speichern' : 'Bitte zuerst die Verbindung testen'}
-            className="flex items-center gap-1.5 rounded bg-tinte px-3 py-1.5 text-[13px] font-medium text-white transition hover:bg-[#1D3494] disabled:opacity-40"
+            className="flex items-center gap-1.5 rounded bg-btn px-3 py-1.5 text-[13px] font-medium text-white transition hover:bg-btn-strong disabled:opacity-40"
           >
             {addMutation.isPending ? <SpinnerIcon size={12} /> : null}
             Speichern

@@ -97,7 +97,7 @@ export function DraftsList({ drafts, isLoading, keysEnabled, onOpen, onDelete }:
                   onOpen(d)
                 }}
                 className={`row-enter group relative cursor-pointer border-b border-hairline px-4 py-2.5 transition ${
-                  active ? 'bg-[#EFF2FB]' : 'hover:bg-[#F8F7F4]'
+                  active ? 'bg-tint' : 'hover:bg-hover'
                 }`}
                 style={{ animationDelay: `${Math.min(i, 15) * 22}ms` }}
               >
@@ -130,7 +130,7 @@ export function DraftsList({ drafts, isLoading, keysEnabled, onOpen, onDelete }:
                       e.stopPropagation()
                       onDelete(d)
                     }}
-                    className="rounded p-1 text-muted transition hover:bg-[#F1EFEA] hover:text-ink"
+                    className="rounded p-1 text-muted transition hover:bg-hover hover:text-ink"
                   >
                     <TrashIcon size={13} />
                   </button>

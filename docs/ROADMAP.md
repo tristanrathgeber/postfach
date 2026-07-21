@@ -96,12 +96,13 @@ Leitplanken (gelten für jeden Batch):
 - [x] Verifizierbare Privatheit: offener Netzwerk-Log, Null-Telemetrie-Statement, englisches README
   - /api/network-info listet ALLE ausgehenden Ziele (inkl. Cloud-LLM-Host, sobald sort_local/draft_local=false — kann nie lügen); Defaults jetzt lokal (kein Cloud-Call out-of-the-box); englisches README mit Zero-Telemetrie + Transparenz-Tabelle; test_no_telemetry_packages_imported
 
-## Batch 11 — Design (bewusst zum Schluss)
-- [ ] **Dark Mode richtig**: Original-Mail im hellen Papier-Container, Smart-Darkening als Opt-in pro Mail/Absender, Bilder nie invertieren
-- [ ] **Reader-View** (eine Taste: Klartext/vereinfacht)
-- [ ] Per-Konto-Farbcodierung in Liste & Unified Inbox
-- [ ] Dichte-Umschalter (kompakt/komfortabel), Leerzustände, Toast-/Motion-Feinschliff
-- [ ] Icon-Verfeinerung + durchgängiger Polish-Pass mit Design-Review
+## Batch 11 — Design (bewusst zum Schluss) ✅ (2026-07-21)
+- [x] **Dark Mode richtig**: Original-Mail im hellen Papier-Container, Bilder nie invertieren
+  - ~60 hartkodierte Farben → semantische CSS-Variablen (Light/Dark/data-theme); „Nachttisch"-Palette; .mail-paper hält den Mail-Inhalt in JEDEM Theme hell; kein Flash (Pre-Paint-Script); usePreferences (system/hell/dunkel). Smart-Darkening bewusst NICHT (heller Bogen ist die robuste Antwort). Design-Review: alle Token WCAG AA, Kategorie-Chips theme-aware (color-mix)
+- [x] **Reader-View** (Taste v): aufgeräumte Newsreader-Klartext-Ansicht, zitierter Verlauf eingeklappt (readerText.simplifyBody, getestet)
+- [x] Per-Konto-Farbcodierung in Liste & Unified Inbox (accountColor, deterministisch, Dark-tauglich)
+- [x] Dichte-Umschalter (kompakt/komfortabel); prefers-reduced-motion respektiert
+- [x] Icon-Verfeinerung (Book/Sun/Moon) + Polish-Pass mit 2-Agenten-Design-Review (::selection, Chips, Konto-Farben gefixt)
 
 ---
 Erledigt bis hier: Multi-Account-IMAP · AI-Views · sicheres HTML + Tracker-Blocking ·

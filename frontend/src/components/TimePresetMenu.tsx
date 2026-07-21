@@ -46,7 +46,7 @@ export function TimePresetMenu({
           key={p.id}
           type="button"
           onClick={() => onPick(p.iso)}
-          className="flex w-full items-baseline justify-between px-3 py-1.5 text-left text-[12.5px] hover:bg-[#F1EFEA]"
+          className="flex w-full items-baseline justify-between px-3 py-1.5 text-left text-[12.5px] hover:bg-hover"
         >
           {p.label}
           <span className="font-mono text-[10px] text-muted">{formatDue(p.iso)}</span>
@@ -66,7 +66,7 @@ export function TimePresetMenu({
             type="button"
             disabled={!custom}
             onClick={() => onPick(`${custom}:00`)}
-            className="shrink-0 rounded bg-tinte px-2 py-1 text-[11px] font-medium text-white transition hover:bg-[#1D3494] disabled:opacity-40"
+            className="shrink-0 rounded bg-btn px-2 py-1 text-[11px] font-medium text-white transition hover:bg-btn-strong disabled:opacity-40"
           >
             OK
           </button>

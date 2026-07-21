@@ -37,7 +37,7 @@ export function ScreenerList({
                 <span className="min-w-0 flex-1 truncate text-[13px] font-medium">{e.name}</span>
                 <span
                   className={`shrink-0 rounded px-1 font-mono text-[9.5px] ${
-                    e.suggestion === 'block' ? 'bg-[#F6E8E4] text-red-800' : 'bg-[#E9EFE6] text-green-900'
+                    e.suggestion === 'block' ? 'bg-danger-bg text-danger' : 'bg-success-bg text-success'
                   }`}
                   title={e.reason}
                 >
@@ -53,7 +53,7 @@ export function ScreenerList({
                   type="button"
                   disabled={busy}
                   onClick={() => onDecide(e, 'allow')}
-                  className={`shrink-0 rounded border border-hairline px-2 py-0.5 text-[11px] text-muted transition hover:border-green-800 hover:text-green-900 ${busy ? 'opacity-50' : ''}`}
+                  className={`shrink-0 rounded border border-hairline px-2 py-0.5 text-[11px] text-muted transition hover:border-success hover:text-success ${busy ? 'opacity-50' : ''}`}
                 >
                   Zulassen
                 </button>
@@ -61,7 +61,7 @@ export function ScreenerList({
                   type="button"
                   disabled={busy}
                   onClick={() => onDecide(e, 'block')}
-                  className={`shrink-0 rounded border border-hairline px-2 py-0.5 text-[11px] text-muted transition hover:border-red-700 hover:text-red-800 ${busy ? 'opacity-50' : ''}`}
+                  className={`shrink-0 rounded border border-hairline px-2 py-0.5 text-[11px] text-muted transition hover:border-danger hover:text-danger ${busy ? 'opacity-50' : ''}`}
                   title={'Künftige Mails landen im Ordner „Aussortiert“ — nichts wird gelöscht'}
                 >
                   Ablehnen

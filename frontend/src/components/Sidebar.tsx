@@ -3,6 +3,7 @@ import type { Account, AccountStatus } from '../lib/types'
 import { sameView, type View } from '../lib/view'
 import { ALL_ACCOUNTS } from '../hooks/useMailData'
 import { ChevronDownIcon, ChevronRightIcon, GearIcon } from './Icons'
+import { accountColor } from '../lib/accountColor'
 import { formatListDate } from '../lib/format'
 
 export type CategoryEntry = { name: string; count: number }
@@ -48,7 +49,7 @@ function NavRow({
       onClick={onClick}
       className={`flex w-full items-center gap-2 rounded px-2 py-[5px] text-left text-[13px] transition ${
         indent ? 'pl-6' : ''
-      } ${active ? 'bg-[#EBEEF9] font-medium text-tinte' : 'text-ink hover:bg-[#F1EFEA]'}`}
+      } ${active ? 'bg-tint font-medium text-tinte' : 'text-ink hover:bg-hover'}`}
     >
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {count !== undefined && count > 0 ? (
@@ -115,7 +116,7 @@ function FolderTree({
               type="button"
               onClick={() => onSelectView({ kind: 'folder', folder: node.full })}
               className={`flex w-full items-center gap-1 rounded px-2 py-[5px] text-left text-[13px] transition ${
-                active ? 'bg-[#EBEEF9] font-medium text-tinte' : 'text-ink hover:bg-[#F1EFEA]'
+                active ? 'bg-tint font-medium text-tinte' : 'text-ink hover:bg-hover'
               }`}
               style={{ paddingLeft: `${16 + depth * 14}px` }}
             >
@@ -127,7 +128,7 @@ function FolderTree({
                     e.stopPropagation()
                     onToggle(node.full)
                   }}
-                  className="-ml-1 rounded p-0.5 text-muted hover:bg-[#E5E2DB]"
+                  className="-ml-1 rounded p-0.5 text-muted hover:bg-hover"
                 >
                   {isOpen ? <ChevronDownIcon size={11} /> : <ChevronRightIcon size={11} />}
                 </span>
@@ -202,10 +203,13 @@ export function Sidebar({
             type="button"
             onClick={() => onSelectAccount(a.name)}
             className={`w-full rounded px-2 py-[5px] text-left transition ${
-              accountSel === a.name ? 'bg-[#EBEEF9]' : 'hover:bg-[#F1EFEA]'
+              accountSel === a.name ? 'bg-tint' : 'hover:bg-hover'
             }`}
           >
             <span className={`flex items-center gap-1.5 truncate text-[13px] ${accountSel === a.name ? 'font-medium text-tinte' : 'text-ink'}`}>
+              {accounts.length > 1 ? (
+                <span className="h-[8px] w-[8px] shrink-0 rounded-full" style={{ background: accountColor(a.name) }} aria-hidden="true" />
+              ) : null}
               {a.name}
               {status[a.name] ? (
                 <span
@@ -215,13 +219,13 @@ export function Sidebar({
                       : `Getrennt seit ${formatListDate(status[a.name].since ?? '')}${status[a.name].last_error ? ` — ${status[a.name].last_error}` : ''}`
                   }
                   aria-label={status[a.name].connected ? 'Verbunden' : 'Getrennt'}
-                  className={`h-[7px] w-[7px] shrink-0 rounded-full ${status[a.name].connected ? 'bg-[#4C8A55]' : 'bg-[#B4483C]'}`}
+                  className={`h-[7px] w-[7px] shrink-0 rounded-full ${status[a.name].connected ? 'bg-success' : 'bg-danger'}`}
                 />
               ) : null}
             </span>
             <span className="block truncate font-mono text-[10px] text-muted">{a.address}</span>
             {status[a.name] && !status[a.name].connected ? (
-              <span className="block truncate font-mono text-[10px] text-[#B4483C]">
+              <span className="block truncate font-mono text-[10px] text-danger">
                 getrennt seit {formatListDate(status[a.name].since ?? '')} — verbinde neu …
               </span>
             ) : null}
@@ -230,7 +234,7 @@ export function Sidebar({
         <button
           type="button"
           onClick={onAddAccount}
-          className="mt-0.5 w-full rounded px-2 py-[5px] text-left text-[12.5px] text-muted transition hover:bg-[#F1EFEA] hover:text-tinte"
+          className="mt-0.5 w-full rounded px-2 py-[5px] text-left text-[12.5px] text-muted transition hover:bg-hover hover:text-tinte"
         >
           + Konto hinzufügen
         </button>
@@ -307,7 +311,7 @@ export function Sidebar({
             <button
               type="button"
               onClick={() => setFoldersOpen((v) => !v)}
-              className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 font-mono text-[10px] uppercase tracking-[0.1em] text-muted transition hover:bg-[#F1EFEA]"
+              className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 font-mono text-[10px] uppercase tracking-[0.1em] text-muted transition hover:bg-hover"
               title={foldersOpen ? 'Ordner einklappen' : 'Ordner ausklappen'}
             >
               {foldersOpen ? <ChevronDownIcon size={12} /> : <ChevronRightIcon size={12} />}
@@ -343,7 +347,7 @@ export function Sidebar({
           onClick={onOpenSettings}
           title="Einstellungen (Signaturen & Snippets)"
           aria-label="Einstellungen"
-          className="rounded p-1 text-muted transition hover:bg-[#F1EFEA] hover:text-tinte"
+          className="rounded p-1 text-muted transition hover:bg-hover hover:text-tinte"
         >
           <GearIcon size={14} />
         </button>

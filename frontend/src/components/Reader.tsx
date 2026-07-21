@@ -11,9 +11,11 @@ import { HtmlMailFrame } from './HtmlMailFrame'
 import { InviteCard } from './InviteCard'
 import { EntityChips } from './EntityChips'
 import { useToast } from './Toast'
-import { AlertIcon, ArchiveIcon, ClockIcon, DownloadIcon, ForwardIcon, MailIcon, MailOpenIcon, PaperclipIcon, ReplyIcon, SparklesIcon, SpinnerIcon, TrashIcon } from './Icons'
+import { AlertIcon, ArchiveIcon, BookIcon, ClockIcon, DownloadIcon, ForwardIcon, MailIcon, MailOpenIcon, PaperclipIcon, ReplyIcon, SparklesIcon, SpinnerIcon, TrashIcon } from './Icons'
 import type { InviteResponse } from '../lib/types'
 import { recordMouseAction } from '../lib/shortcutTeach'
+import { simplifyBody, wasTruncated } from '../lib/readerText'
+import { isEditableTarget } from '../lib/keyboard'
 
 type ReaderProps = {
   opened: MsgRef | null
@@ -33,6 +35,8 @@ type ReaderProps = {
   onChangeCategory: (detail: Detail, category: string) => void
   /** Klick auf eine Faden-Mail: im Reader öffnen. */
   onOpenThreadMail: (mail: ThreadMail) => void
+  /** Tastatur aktiv (kein Overlay offen) — steuert die v-Taste. */
+  keysEnabled?: boolean
   /** Globaler KI-Schalter — aus blendet „Zusammenfassen" aus. */
   aiEnabled?: boolean
   /** Faden-Triage (Gesendet-Kopien sind bereits herausgefiltert). */
@@ -109,7 +113,7 @@ function ThreadRail({
             onClick={() => summaryMutation.mutate()}
             disabled={summaryMutation.isPending}
             title="Emilia fasst den Faden zusammen (lokal, nur auf Klick)"
-            className="flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[10.5px] text-muted transition hover:bg-[#F1EFEA] hover:text-tinte disabled:opacity-50"
+            className="flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[10.5px] text-muted transition hover:bg-hover hover:text-tinte disabled:opacity-50"
           >
             {summaryMutation.isPending ? <SpinnerIcon size={10} /> : <SparklesIcon size={10} />}
             Zusammenfassen
@@ -121,7 +125,7 @@ function ThreadRail({
               type="button"
               onClick={() => onAction(triagable, 'archive')}
               title="Alle empfangenen Mails des Fadens archivieren"
-              className="rounded px-1.5 py-0.5 font-mono text-[10.5px] text-muted transition hover:bg-[#F1EFEA] hover:text-tinte"
+              className="rounded px-1.5 py-0.5 font-mono text-[10.5px] text-muted transition hover:bg-hover hover:text-tinte"
             >
               Faden archivieren
             </button>
@@ -129,7 +133,7 @@ function ThreadRail({
               type="button"
               onClick={() => onAction(triagable, 'trash')}
               title="Alle empfangenen Mails des Fadens in den Papierkorb"
-              className="rounded px-1.5 py-0.5 font-mono text-[10.5px] text-muted transition hover:bg-[#F1EFEA] hover:text-red-700"
+              className="rounded px-1.5 py-0.5 font-mono text-[10.5px] text-muted transition hover:bg-hover hover:text-danger"
             >
               Papierkorb
             </button>
@@ -160,7 +164,7 @@ function ThreadRail({
                 onClick={() => onOpen(m)}
                 aria-current={isCurrent || undefined}
                 className={`flex w-full items-baseline gap-2 border-b border-hairline px-3 py-1.5 text-left last:border-b-0 ${
-                  isCurrent ? 'bg-[#EFF2FB]' : 'hover:bg-[#F8F7F4]'
+                  isCurrent ? 'bg-tint' : 'hover:bg-hover'
                 }`}
               >
                 {!m.seen ? <span className="h-[5px] w-[5px] shrink-0 self-center rounded-full bg-unread" aria-label="Ungelesen" /> : null}
@@ -168,7 +172,7 @@ function ThreadRail({
                   {m.from_name || m.from_addr}
                 </span>
                 <span className="min-w-0 flex-1 truncate text-[12px] text-muted">{m.snippet}</span>
-                <span className="shrink-0 rounded bg-[#F1EFEA] px-1 font-mono text-[9.5px] text-muted">
+                <span className="shrink-0 rounded bg-hover px-1 font-mono text-[9.5px] text-muted">
                   {folderLeaf(m.folder)}
                 </span>
                 <time className="shrink-0 font-mono text-[10px] text-muted">{formatListDate(m.date)}</time>
@@ -181,7 +185,7 @@ function ThreadRail({
   )
 }
 
-export function Reader({ opened, imagesEnabled, onEnableImages, onReply, onForward, onArchive, onTrash, onToggleSeen, onToggleSpam, onSnooze, categories, onChangeCategory, onOpenThreadMail, aiEnabled = true, onThreadAction }: ReaderProps) {
+export function Reader({ opened, keysEnabled = true, imagesEnabled, onEnableImages, onReply, onForward, onArchive, onTrash, onToggleSeen, onToggleSpam, onSnooze, categories, onChangeCategory, onOpenThreadMail, aiEnabled = true, onThreadAction }: ReaderProps) {
   const { showToast } = useToast()
   // Behutsames Shortcut-Teaching: nur bei Maus-Klicks (nicht den Tastatur-
   // Handlern), höchstens einmal je Aktion.
@@ -191,6 +195,22 @@ export function Reader({ opened, imagesEnabled, onEnableImages, onReply, onForwa
   }
   const [snoozeOpen, setSnoozeOpen] = useState(false)
   useEffect(() => setSnoozeOpen(false), [opened])
+  // Reader-View (aufgeräumte Klartext-Ansicht) — pro geöffneter Mail zurückgesetzt.
+  const [readerView, setReaderView] = useState(false)
+  useEffect(() => setReaderView(false), [opened])
+  // Taste „v" schaltet um (nur bei offener Mail, kein Overlay offen, nicht in
+  // Eingabefeldern) — konsistent zu den globalen Shortcuts in App.
+  useEffect(() => {
+    if (!opened || !keysEnabled) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'v' && !e.metaKey && !e.ctrlKey && !isEditableTarget(e)) {
+        e.preventDefault()
+        setReaderView((v) => !v)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [opened, keysEnabled])
   // RSVP-Antwort merken (pro geöffneter Mail), damit die Karte nach dem Senden
   // den Status zeigt statt erneut die Knöpfe.
   const [answered, setAnswered] = useState<InviteResponse | null>(null)
@@ -347,6 +367,18 @@ export function Reader({ opened, imagesEnabled, onEnableImages, onReply, onForwa
               <ActionButton label={detail.seen ? 'Ungelesen' : 'Gelesen'} hint="u" onClick={() => { teach('seen'); onToggleSeen(detail) }}>
                 {detail.seen ? <MailIcon size={13} /> : <MailOpenIcon size={13} />}
               </ActionButton>
+              <button
+                type="button"
+                onClick={() => setReaderView((v) => !v)}
+                title="Lesen-Ansicht: aufgeräumt, ohne Zitat-Verlauf (v)"
+                aria-pressed={readerView}
+                className={`flex items-center gap-1.5 rounded border px-2.5 py-1 text-[12px] transition ${
+                  readerView ? 'border-tinte bg-tint text-tinte' : 'border-hairline bg-surface hover:border-tinte hover:text-tinte'
+                }`}
+              >
+                <BookIcon size={13} />
+                Lesen
+              </button>
               <ActionButton
                 label={exportMutation.isPending ? 'Exportiere …' : 'Als Markdown'}
                 onClick={() => exportMutation.mutate(opened)}
@@ -398,16 +430,28 @@ export function Reader({ opened, imagesEnabled, onEnableImages, onReply, onForwa
             </div>
           ) : null}
 
-          {/* Inhalt */}
-          <div className="mt-4 rounded border border-hairline bg-surface px-5 py-4">
-            {html !== null ? (
-              <HtmlMailFrame html={html} />
-            ) : (
-              <pre className="whitespace-pre-wrap break-words font-sans text-[14px] leading-relaxed">
-                {detail.body_text}
-              </pre>
-            )}
-          </div>
+          {/* Inhalt — Reader-View (aufgeräumt, themen-angepasst) ODER die
+              Original-Mail auf hellem Papier (E-Mails sind für Weiß gestaltet). */}
+          {readerView ? (
+            <div className="reader-view mt-4 rounded border border-hairline bg-surface px-6 py-5">
+              <p className="max-w-[68ch] whitespace-pre-wrap break-words font-serif text-[15.5px] leading-[1.75] text-ink">
+                {simplifyBody(detail.body_text)}
+              </p>
+              {wasTruncated(detail.body_text) ? (
+                <p className="mt-3 font-mono text-[10.5px] text-muted">Zitierter Verlauf ausgeblendet — Taste v zeigt das Original.</p>
+              ) : null}
+            </div>
+          ) : (
+            <div className="mail-paper mt-4 rounded border border-hairline px-5 py-4">
+              {html !== null ? (
+                <HtmlMailFrame html={html} />
+              ) : (
+                <pre className="whitespace-pre-wrap break-words font-sans text-[14px] leading-relaxed">
+                  {detail.body_text}
+                </pre>
+              )}
+            </div>
+          )}
 
           {/* Anhänge */}
           {detail.attachments.length > 0 ? (

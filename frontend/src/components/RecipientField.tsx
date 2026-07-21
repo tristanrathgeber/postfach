@@ -153,7 +153,7 @@ export function RecipientField({ value, onChange, onPickContact, autoFocus, plac
         {value.map((addr) => (
           <span
             key={addr}
-            className="flex max-w-full items-center gap-1 rounded bg-[#EBEEF9] px-1.5 py-0.5 font-mono text-[11px] text-tinte"
+            className="flex max-w-full items-center gap-1 rounded bg-tint px-1.5 py-0.5 font-mono text-[11px] text-tinte"
           >
             <span className="min-w-0 truncate">{addr}</span>
             <button
@@ -205,7 +205,7 @@ export function RecipientField({ value, onChange, onPickContact, autoFocus, plac
                 onClick={() => pick(c)}
                 onMouseEnter={() => setActiveIdx(i)}
                 className={`flex w-full items-baseline gap-1.5 px-2.5 py-1.5 text-left text-[12.5px] ${
-                  i === activeIdx ? 'bg-[#EFF2FB] text-tinte' : 'text-ink'
+                  i === activeIdx ? 'bg-tint text-tinte' : 'text-ink'
                 }`}
               >
                 {c.name ? (

@@ -40,7 +40,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             <div
               key={t.id}
               className={`fade-in pointer-events-auto rounded border bg-surface px-3 py-2 text-[13px] shadow-sm ${
-                t.kind === 'error' ? 'border-red-300 text-red-700' : 'border-hairline text-ink'
+                t.kind === 'error' ? 'border-danger/50 text-danger' : 'border-hairline text-ink'
               }`}
             >
               {t.message}

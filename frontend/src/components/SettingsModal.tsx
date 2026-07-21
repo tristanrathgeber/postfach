@@ -12,11 +12,15 @@ import { AccountsSection } from './AccountsSection'
 
 type SettingsModalProps = {
   accounts: Account[]
+  theme: import('../hooks/usePreferences').Theme
+  onThemeChange: (t: import('../hooks/usePreferences').Theme) => void
+  density: import('../hooks/usePreferences').Density
+  onDensityChange: (d: import('../hooks/usePreferences').Density) => void
   onClose: () => void
 }
 
 /** Einstellungen (Zahnrad): Signaturen pro Konto + Snippets — Speichern per PUT beim Schließen. */
-export function SettingsModal({ accounts, onClose }: SettingsModalProps) {
+export function SettingsModal({ accounts, theme, onThemeChange, density, onDensityChange, onClose }: SettingsModalProps) {
   const settingsQuery = useSettings()
   const snippetsQuery = useSnippets()
   const ready = settingsQuery.data !== undefined && snippetsQuery.data !== undefined
@@ -25,6 +29,10 @@ export function SettingsModal({ accounts, onClose }: SettingsModalProps) {
     return (
       <SettingsForm
         accounts={accounts}
+        theme={theme}
+        onThemeChange={onThemeChange}
+        density={density}
+        onDensityChange={onDensityChange}
         initialSignatures={settingsQuery.data.signatures}
         initialNotifications={settingsQuery.data.notifications}
         initialUndoSeconds={settingsQuery.data.undo_seconds}
@@ -40,7 +48,7 @@ export function SettingsModal({ accounts, onClose }: SettingsModalProps) {
       <div className="w-[620px] max-w-[92vw] rounded-lg border border-hairline bg-surface p-8 shadow-xl">
         {settingsQuery.isError || snippetsQuery.isError ? (
           <div className="flex items-center gap-3">
-            <p className="flex-1 text-[13px] text-red-700">
+            <p className="flex-1 text-[13px] text-danger">
               Einstellungen nicht ladbar: {errText(settingsQuery.error ?? snippetsQuery.error)}
             </p>
             <button
@@ -74,6 +82,10 @@ function ModalOverlay({ onDismiss, children }: { onDismiss: () => void; children
 
 function SettingsForm({
   accounts,
+  theme,
+  onThemeChange,
+  density,
+  onDensityChange,
   initialSignatures,
   initialNotifications,
   initialUndoSeconds,
@@ -82,6 +94,10 @@ function SettingsForm({
   onClose,
 }: {
   accounts: Account[]
+  theme: import('../hooks/usePreferences').Theme
+  onThemeChange: (t: import('../hooks/usePreferences').Theme) => void
+  density: import('../hooks/usePreferences').Density
+  onDensityChange: (d: import('../hooks/usePreferences').Density) => void
   initialSignatures: Record<string, string>
   initialNotifications: Record<string, boolean>
   initialUndoSeconds: number
@@ -158,6 +174,44 @@ function SettingsForm({
       </header>
 
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-4">
+        {/* Erscheinungsbild: Theme + Dichte (lokal, sofort) */}
+        <section>
+          <h3 className="font-mono text-[9.5px] uppercase tracking-[0.1em] text-muted">Erscheinungsbild</h3>
+          <div className="mt-2 flex flex-wrap items-center gap-6">
+            <div className="flex items-center gap-2">
+              <span className="text-[13px]">Theme</span>
+              <div className="flex rounded border border-hairline p-0.5">
+                {(['system', 'light', 'dark'] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => onThemeChange(t)}
+                    className={`rounded px-2.5 py-1 text-[12px] transition ${theme === t ? 'bg-tint text-tinte' : 'text-muted hover:text-ink'}`}
+                  >
+                    {t === 'system' ? 'System' : t === 'light' ? 'Hell' : 'Dunkel'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[13px]">Dichte</span>
+              <div className="flex rounded border border-hairline p-0.5">
+                {(['comfortable', 'compact'] as const).map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => onDensityChange(d)}
+                    className={`rounded px-2.5 py-1 text-[12px] transition ${density === d ? 'bg-tint text-tinte' : 'text-muted hover:text-ink'}`}
+                  >
+                    {d === 'comfortable' ? 'Komfortabel' : 'Kompakt'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          <p className="mt-1.5 text-[11.5px] text-muted">Dunkel lässt die Original-Mail auf hellem Papier — E-Mails sind für Weiß gestaltet.</p>
+        </section>
+
         {/* Signaturen pro Konto */}
         <section>
           <h3 className="font-mono text-[9.5px] uppercase tracking-[0.1em] text-muted">Signaturen</h3>
@@ -315,7 +369,7 @@ function SettingsForm({
           type="button"
           onClick={requestClose}
           disabled={saveMutation.isPending}
-          className="flex items-center gap-1.5 rounded bg-tinte px-3.5 py-1.5 text-[12.5px] font-medium text-white transition hover:bg-[#1D3494] disabled:opacity-60"
+          className="flex items-center gap-1.5 rounded bg-btn px-3.5 py-1.5 text-[12.5px] font-medium text-white transition hover:bg-btn-strong disabled:opacity-60"
         >
           {saveMutation.isPending ? <SpinnerIcon size={12} /> : null}
           Fertig

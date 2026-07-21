@@ -147,3 +147,15 @@ export function SpinnerIcon({ size = 14, className = '' }: IconProps) {
     </svg>
   )
 }
+
+export function BookIcon(p: IconProps) {
+  return <Svg {...p} paths={['M4 19.5A2.5 2.5 0 0 1 6.5 17H20', 'M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z']} />
+}
+
+export function SunIcon(p: IconProps) {
+  return <Svg {...p} paths={['M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10Z', 'M12 1v2', 'M12 21v2', 'M4.2 4.2l1.4 1.4', 'M18.4 18.4l1.4 1.4', 'M1 12h2', 'M21 12h2', 'M4.2 19.8l1.4-1.4', 'M18.4 5.6l1.4-1.4']} />
+}
+
+export function MoonIcon(p: IconProps) {
+  return <Svg {...p} paths={['M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z']} />
+}

@@ -4,12 +4,15 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 // lesbare Schrift, max-width 720px, Bilder nie breiter als der Frame.
 const FRAME_CSS = `
   html, body { margin: 0; padding: 0; }
+  /* Mail-Inhalt bleibt IMMER auf hellem Papier — E-Mails sind für Weiß
+     gestaltet; Invertieren zerstört Layout und Bilder. */
   body {
     padding: 4px 1px 16px;
     font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
     font-size: 15px;
     line-height: 1.55;
     color: #1a1917;
+    background: #ffffff;
     max-width: 720px;
     word-break: break-word;
   }

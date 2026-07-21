@@ -51,7 +51,7 @@ export function FolderMapSection({ account }: { account: string | null }) {
         wähle einen bestehenden Ordner, wenn dein Anbieter keine neuen zulässt (z. B. GMX).
       </p>
       {query.isError ? (
-        <p className="mt-2 text-[12px] text-red-700">Ordner nicht ladbar: {errText(query.error)}</p>
+        <p className="mt-2 text-[12px] text-danger">Ordner nicht ladbar: {errText(query.error)}</p>
       ) : !query.data ? (
         <p className="mt-2 font-mono text-[11px] text-muted">Lädt …</p>
       ) : (

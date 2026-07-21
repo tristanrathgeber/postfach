@@ -18,6 +18,7 @@ import {
 } from './hooks/useMailData'
 import { useLiveEvents } from './hooks/useLiveEvents'
 import { useMailActions } from './hooks/useMailActions'
+import { usePreferences } from './hooks/usePreferences'
 import { AppShell } from './components/AppShell'
 import { Sidebar } from './components/Sidebar'
 import { MessageList } from './components/MessageList'
@@ -146,6 +147,10 @@ function Postfach() {
   const screenerAgg = useScreenerAggregate(accountNames)
   const snippetsQuery = useSnippets()
   const settingsQuery = useSettings()
+  const { theme, setTheme, density, setDensity } = usePreferences()
+  // Effektiv dunkel? system kann per OS-Einstellung dunkel auflösen.
+  const effectiveDark =
+    theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
   // Globaler KI-Schalter: KI-UI erst zeigen, wenn die Settings es bestätigen —
   // sonst blitzt der Emilia-Knopf bei deaktivierter KI kurz auf.
   const aiEnabled = settingsQuery.data?.ai_enabled ?? false
@@ -624,6 +629,14 @@ function Postfach() {
       keywords: ['about', 'version', 'privatheit', 'update', 'netzwerk'],
       run: () => setAboutOpen(true),
     })
+    list.push({
+      id: 'theme',
+      group: 'Aktionen',
+      label: effectiveDark ? 'Zu hellem Theme wechseln' : 'Zu dunklem Theme wechseln',
+      keywords: ['dark mode', 'dunkel', 'hell', 'erscheinungsbild', 'theme'],
+      // system kann bereits dunkel auflösen — dann effektiv umschalten.
+      run: () => setTheme(effectiveDark ? 'light' : 'dark'),
+    })
 
     // Snippets an der Cursor-Position einfügen — nur sinnvoll bei offenem Composer.
     if (composer) {
@@ -675,6 +688,8 @@ function Postfach() {
     runSortieren,
     selectedMsg,
     snippetsQuery.data,
+    effectiveDark,
+    setTheme,
     toggleSeen,
   ])
 
@@ -811,6 +826,8 @@ function Postfach() {
             listKey={`${viewKey(view)}|${accountSel}`}
             selectedKey={selectedKey}
             searchActive={searchActive}
+            multiAccount={accountSel === ALL_ACCOUNTS && accounts.length > 1}
+            density={density}
             searchIndexReady={searchIndexReady}
             activeQuery={view.kind === 'search' ? view.query : ''}
             searchInputRef={searchInputRef}
@@ -838,6 +855,7 @@ function Postfach() {
         reader={
           <Reader
             opened={opened}
+            keysEnabled={!paletteOpen && !composer && !settingsOpen && !addAccountOpen && !aboutOpen}
             imagesEnabled={imagesEnabled}
             onEnableImages={() => setImagesFor(opened ? msgKey(opened) : null)}
             onReply={(detail) => openComposer({ mode: 'reply', detail })}
@@ -893,7 +911,16 @@ function Postfach() {
           onClose={() => setComposer(null)}
         />
       ) : null}
-      {settingsOpen ? <SettingsModal accounts={accounts} onClose={() => setSettingsOpen(false)} /> : null}
+      {settingsOpen ? (
+        <SettingsModal
+          accounts={accounts}
+          theme={theme}
+          onThemeChange={setTheme}
+          density={density}
+          onDensityChange={setDensity}
+          onClose={() => setSettingsOpen(false)}
+        />
+      ) : null}
       {addAccountOpen ? <AddAccountDialog onClose={() => setAddAccountOpen(false)} /> : null}
       {aboutOpen ? <AboutDialog onClose={() => setAboutOpen(false)} /> : null}
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} actions={paletteActions} onSearch={submitSearch} />

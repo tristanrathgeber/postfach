@@ -668,15 +668,15 @@ export function Composer({
           ) : null}
 
           {overLimit ? (
-            <p className="text-[12px] text-red-700">
+            <p className="text-[12px] text-danger">
               Anhänge zu groß: {formatSize(totalSize)} — Limit 25 MB. Senden ist deaktiviert.
             </p>
           ) : null}
 
           {draftMutation.isError ? (
-            <p className="text-[12px] text-red-700">KI-Entwurf fehlgeschlagen: {errText(draftMutation.error)}</p>
+            <p className="text-[12px] text-danger">KI-Entwurf fehlgeschlagen: {errText(draftMutation.error)}</p>
           ) : null}
-          {sendError ? <p className="text-[12px] text-red-700">Senden fehlgeschlagen: {sendError}</p> : null}
+          {sendError ? <p className="text-[12px] text-danger">Senden fehlgeschlagen: {sendError}</p> : null}
         </div>
 
         <footer className="flex items-center gap-2 border-t border-hairline px-4 py-3">
@@ -741,7 +741,7 @@ export function Composer({
           </select>
           <span className="flex-1" />
           {discardArmed ? (
-            <span className="font-mono text-[10.5px] text-red-700">
+            <span className="font-mono text-[10.5px] text-danger">
               {files.length > 0
                 ? 'Nochmal Esc: Schließen (Text bleibt als Entwurf, Anhänge gehen verloren)'
                 : 'Nochmal Esc: Schließen (Entwurf bleibt)'}
@@ -753,7 +753,7 @@ export function Composer({
               onClick={trySend}
               disabled={sendMutation.isPending || overLimit}
               className={`rounded-l px-3.5 py-1.5 text-[12.5px] font-medium text-white transition disabled:opacity-60 ${
-                armed ? 'bg-[#8C2F2F] hover:bg-[#7A2828]' : 'bg-tinte hover:bg-[#1D3494]'
+                armed ? 'bg-[#8C2F2F] hover:bg-[#7A2828]' : 'bg-btn hover:bg-btn-strong'
               }`}
             >
               {sendMutation.isPending ? 'Senden …' : armed ? 'Wirklich senden?' : 'Senden'}
@@ -765,7 +765,7 @@ export function Composer({
               title="Später senden"
               aria-label="Später senden"
               aria-expanded={laterOpen}
-              className="rounded-r border-l border-white/25 bg-tinte px-1.5 py-1.5 text-[11px] text-white transition hover:bg-[#1D3494] disabled:opacity-60"
+              className="rounded-r border-l border-white/25 bg-btn px-1.5 py-1.5 text-[11px] text-white transition hover:bg-btn-strong disabled:opacity-60"
             >
               ▾
             </button>
