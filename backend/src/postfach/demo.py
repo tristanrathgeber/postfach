@@ -84,6 +84,7 @@ class DemoMailbox:
             ],
             "Papierkorb": [],
             "Archive": [],
+            "Spam": [],
         }
         self._next_uid = 500
 
@@ -136,16 +137,30 @@ class DemoMailbox:
         self._folders[folder] = [m for m in self._folders[folder] if m.uid != uid]
         self._folders.setdefault(target, []).append(mail)
 
+    def move_many(self, folder: str, uids: list[int], target: str, ensure: bool = False) -> None:
+        for uid in uids:
+            self.move(folder, uid, target, ensure)
+
     def set_seen(self, folder: str, uid: int, seen: bool) -> None:
         self._folders[folder] = [
             replace(m, seen=seen) if m.uid == uid else m for m in self._folders.get(folder, [])
         ]
+
+    def set_seen_many(self, folder: str, uids: list[int], seen: bool) -> None:
+        for uid in uids:
+            self.set_seen(folder, uid, seen)
 
     def trash(self, folder: str, uid: int) -> None:
         self.move(folder, uid, "Papierkorb")
 
     def archive_folder_default(self) -> str:
         return "Archive"
+
+    def trash_folder(self) -> str:
+        return "Papierkorb"
+
+    def junk_folder(self) -> str:
+        return "Spam"
 
     def append_sent(self, mime_bytes: bytes) -> None:
         msg = email.message_from_bytes(mime_bytes, policy=default_policy)

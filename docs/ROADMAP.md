@@ -21,13 +21,13 @@ Leitplanken (gelten für jeden Batch):
 - [x] **Kontakte-Autocomplete** (lokal aus bisherigen Mails aufgebaut, Ranking nach Häufigkeit×Aktualität)
 - [x] **Snippets** (Textbausteine mit {vorname}/{datum}, per ;kürzel+Tab und ⌘K)
 
-## Batch 2 — Empfangen & Ordnung (Table Stakes II)
-- [ ] **macOS-Benachrichtigungen** (nativ, aus dem vorhandenen Push-Kanal; pro Konto schaltbar)
-- [ ] **Spam-Markierung** („Spam" → Spamverdacht-Ordner, „Kein Spam" zurück)
-- [ ] **Mehrfachauswahl & Bulk-Triage** (Auswahl per Klick/Shift/`x`, Aktionen auf alle)
-- [ ] **Klassifikation korrigierbar** (Kategorie per UI ändern → Cache-Update; „falsch einsortiert" = 1 Tastendruck zurück — Fyxer-Lektion: falsche Ablage ist der Vertrauenskiller)
-- [ ] **Verbindungsstatus sichtbar** („GMX getrennt 14:32, neu verbunden" — nie still scheitern)
-- [ ] **Sortier-Automatik scharf schalten** (launchd alle 30 Min für den email-agent)
+## Batch 2 — Empfangen & Ordnung (Table Stakes II) ✅ 2026-07-21
+- [x] **macOS-Benachrichtigungen** (osascript, argv-sicher; UID-Wasserstand gegen Doppel-Meldungen; pro Konto schaltbar)
+- [x] **Spam-Markierung** (`!` bzw. Reader-Button; SPECIAL-USE \Junk → Namenssuche inkl. GMX „Spamverdacht"; „Kein Spam" zurück in die Inbox)
+- [x] **Mehrfachauswahl & Bulk-Triage** (`x`/Shift-Klick/Auswahlkreis, Aktionsleiste; EIN IMAP-Request pro Konto via /api/batch-action)
+- [x] **Klassifikation korrigierbar** (Kategorie-Badge im Reader ist ein Menü; Nutzer-Korrektur schlägt die KI dauerhaft — auch gegen laufende Klassifikations-Läufe)
+- [x] **Verbindungsstatus sichtbar** (Punkt + „getrennt seit HH:MM" in der Sidebar, SSE-Status-Events, /api/status)
+- [x] **Sortier-Automatik scharf** (launchd alle 30 Min, --no-drafts; Log unter ~/Library/Logs/postfach-email-agent.log)
 
 ## Batch 3 — Lokale Volltextsuche (Leuchtturm, groß)
 - [ ] SQLite-FTS5-Index über den kompletten lokalen Bestand, Ziel **< 50 ms über 100k Mails**

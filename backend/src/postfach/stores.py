@@ -50,21 +50,29 @@ class _JsonFile:
 
 class SettingsStore(_JsonFile):
     def __init__(self, path: Path) -> None:
-        super().__init__(path, {"signatures": {}})
+        super().__init__(path, {"signatures": {}, "notifications": {}})
 
     def get(self) -> dict:
         with self._lock:
             data = self._read()
         data.setdefault("signatures", {})
+        data.setdefault("notifications", {})
         return data
 
     def put(self, data: dict) -> None:
+        """Teil-Update: nur mitgeschickte Sektionen ersetzen — ein Client nach
+        altem Contract (nur signatures) darf die Toggles nicht zurücksetzen."""
         with self._lock:
             current = self._read()
-            current["signatures"] = {
-                str(k): str(v) for k, v in (data.get("signatures") or {}).items()
-            }
+            if data.get("signatures") is not None:
+                current["signatures"] = {str(k): str(v) for k, v in data["signatures"].items()}
+            if data.get("notifications") is not None:
+                # Fehlender Konto-Eintrag = Benachrichtigungen an (Default)
+                current["notifications"] = {str(k): bool(v) for k, v in data["notifications"].items()}
             self._write(current)
+
+    def notifications_enabled(self, account: str) -> bool:
+        return bool(self.get()["notifications"].get(account, True))
 
 
 class DraftStore(_JsonFile):

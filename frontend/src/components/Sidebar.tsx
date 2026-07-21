@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import type { Account } from '../lib/types'
+import type { Account, AccountStatus } from '../lib/types'
 import { sameView, type View } from '../lib/view'
 import { ALL_ACCOUNTS } from '../hooks/useMailData'
 import { ChevronDownIcon, ChevronRightIcon, GearIcon } from './Icons'
+import { formatListDate } from '../lib/format'
 
 export type CategoryEntry = { name: string; count: number }
 
@@ -17,6 +18,8 @@ type SidebarProps = {
   unreadCount: number
   draftsCount: number
   folders: string[]
+  /** Watcher-Verbindungsstatus je Konto (leer, solange kein Watcher läuft — z. B. Demo). */
+  status: Record<string, AccountStatus>
   onOpenSettings: () => void
 }
 
@@ -153,6 +156,7 @@ export function Sidebar({
   unreadCount,
   draftsCount,
   folders,
+  status,
   onOpenSettings,
 }: SidebarProps) {
   // Standardmäßig AUSGEKLAPPT — der eingeklappte Mini-Schalter war in der
@@ -189,10 +193,26 @@ export function Sidebar({
               accountSel === a.name ? 'bg-[#EBEEF9]' : 'hover:bg-[#F1EFEA]'
             }`}
           >
-            <span className={`block truncate text-[13px] ${accountSel === a.name ? 'font-medium text-tinte' : 'text-ink'}`}>
+            <span className={`flex items-center gap-1.5 truncate text-[13px] ${accountSel === a.name ? 'font-medium text-tinte' : 'text-ink'}`}>
               {a.name}
+              {status[a.name] ? (
+                <span
+                  title={
+                    status[a.name].connected
+                      ? `Verbunden seit ${formatListDate(status[a.name].since ?? '')}`
+                      : `Getrennt seit ${formatListDate(status[a.name].since ?? '')}${status[a.name].last_error ? ` — ${status[a.name].last_error}` : ''}`
+                  }
+                  aria-label={status[a.name].connected ? 'Verbunden' : 'Getrennt'}
+                  className={`h-[7px] w-[7px] shrink-0 rounded-full ${status[a.name].connected ? 'bg-[#4C8A55]' : 'bg-[#B4483C]'}`}
+                />
+              ) : null}
             </span>
             <span className="block truncate font-mono text-[10px] text-muted">{a.address}</span>
+            {status[a.name] && !status[a.name].connected ? (
+              <span className="block truncate font-mono text-[10px] text-[#B4483C]">
+                getrennt seit {formatListDate(status[a.name].since ?? '')} — verbinde neu …
+              </span>
+            ) : null}
           </button>
         ))}
       </div>

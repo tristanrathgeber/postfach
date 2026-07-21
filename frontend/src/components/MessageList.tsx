@@ -1,9 +1,9 @@
 import { useEffect, useState, type RefObject } from 'react'
-import type { Summary } from '../lib/types'
+import type { BatchAction, Summary } from '../lib/types'
 import { msgKey } from '../lib/format'
 import { MessageRow } from './MessageRow'
 import { EmptyState } from './EmptyState'
-import { SearchIcon, SpinnerIcon, XIcon } from './Icons'
+import { AlertIcon, ArchiveIcon, MailOpenIcon, SearchIcon, SpinnerIcon, TrashIcon, XIcon } from './Icons'
 
 type MessageListProps = {
   title: string
@@ -21,6 +21,12 @@ type MessageListProps = {
   onArchive: (msg: Summary) => void
   onTrash: (msg: Summary) => void
   onToggleSeen: (msg: Summary) => void
+  checked: ReadonlySet<string>
+  onToggleCheck: (msg: Summary, range: boolean) => void
+  onBulk: (action: BatchAction) => void
+  onClearChecked: () => void
+  /** true im Spam-Ordner: der Bulk-Button holt zurück statt zu markieren. */
+  spamMode: boolean
   onSortieren: () => void
   sortierenPending: boolean
   hasUnclassified: boolean
@@ -40,6 +46,20 @@ function SkeletonRows() {
   )
 }
 
+function BulkButton({ title, onClick, children }: { title: string; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      onClick={onClick}
+      className="rounded p-1 text-tinte transition hover:bg-[#DFE5F7]"
+    >
+      {children}
+    </button>
+  )
+}
+
 export function MessageList({
   title,
   messages,
@@ -56,6 +76,11 @@ export function MessageList({
   onArchive,
   onTrash,
   onToggleSeen,
+  checked,
+  onToggleCheck,
+  onBulk,
+  onClearChecked,
+  spamMode,
   onSortieren,
   sortierenPending,
   hasUnclassified,
@@ -129,6 +154,29 @@ export function MessageList({
         </div>
       ) : null}
 
+      {/* Bulk-Triage: erscheint, sobald etwas ausgewählt ist */}
+      {checked.size > 0 ? (
+        <div className="flex items-center gap-1 border-b border-hairline bg-[#EFF2FB] px-3 py-1.5">
+          <span className="font-mono text-[11px] text-tinte">{checked.size} ausgewählt</span>
+          <span className="flex-1" />
+          <BulkButton title="Archivieren (e)" onClick={() => onBulk('archive')}>
+            <ArchiveIcon size={13} />
+          </BulkButton>
+          <BulkButton title="Papierkorb (#)" onClick={() => onBulk('trash')}>
+            <TrashIcon size={13} />
+          </BulkButton>
+          <BulkButton title="Als gelesen markieren (u)" onClick={() => onBulk('read')}>
+            <MailOpenIcon size={13} />
+          </BulkButton>
+          <BulkButton title={spamMode ? 'Kein Spam (!)' : 'Spam (!)'} onClick={() => onBulk('spam')}>
+            <AlertIcon size={13} />
+          </BulkButton>
+          <BulkButton title="Auswahl aufheben (Esc)" onClick={onClearChecked}>
+            <XIcon size={13} />
+          </BulkButton>
+        </div>
+      ) : null}
+
       {/* Konto-Fehler (z. B. 502 — Konto nicht erreichbar); übrige Konten laufen weiter */}
       {failures.map((account) => (
         <div key={account} className="border-b border-red-300 bg-red-50 px-4 py-1.5 text-[12px] text-red-700">
@@ -155,10 +203,13 @@ export function MessageList({
               msg={m}
               index={i}
               selected={selectedKey === msgKey(m)}
+              checked={checked.has(msgKey(m))}
+              anyChecked={checked.size > 0}
               onOpen={onOpen}
               onArchive={onArchive}
               onTrash={onTrash}
               onToggleSeen={onToggleSeen}
+              onToggleCheck={onToggleCheck}
             />
           ))
         )}

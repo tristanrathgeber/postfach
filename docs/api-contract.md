@@ -90,3 +90,31 @@ mode: "new"|"reply"|"forward", ref_folder?: string, ref_uid?: number, updated: i
 - JSON-Body zusätzlich: `"bcc": string[]`, `"forward_of": {"folder","uid","include_attachments": bool}` (Server hängt Original-Anhänge an)
 - NEU multipart/form-data: Feld `payload` (obiges JSON als String) + `files` (0..n Anhänge, gesamt ≤ 25 MB → 413 bei Überschreitung)
 - Gesendet-Kopie behält Bcc-Header; SMTP-Versand entfernt ihn (Envelope korrekt)
+
+## Nachtrag v0.3.1 — Review-Härtung Batch 1 (2026-07-21)
+
+- `POST /api/send`: neu `"draft_id"?: string` — Server löscht den Entwurf nach
+  erfolgreichem Versand (atomar gegenüber spät ankommenden Auto-Save-Upserts).
+  Das 25-MB-Limit zählt auch serverseitig eingesammelte Weiterleitungs-Anhänge.
+  Header-Werte (to/cc/bcc/subject, Anhang-Namen) werden CRLF-bereinigt.
+- `Draft` zusätzlich: `"include_attachments"?: bool` (Weiterleitung: Checkbox-Zustand).
+
+## Nachtrag v0.4 — Batch 2 „Empfangen & Ordnung" (eingefroren 2026-07-21)
+
+| Methode & Pfad | Request | Response |
+|---|---|---|
+| `POST /api/batch-action` | `{"account","folder","uids":[number],"action":"read"\|"unread"\|"archive"\|"trash"\|"spam"\|"unspam"}` | `{"ok":true,"done":number}` |
+| `POST /api/messages/{account}/{uid}/action` | zusätzlich erlaubt: `"action":"spam"\|"unspam"` | `{"ok":true}` |
+| `POST /api/classify/override` | `{"account","folder","uid","category"}` (nur konfigurierte Kategorien, sonst 422) | `{"ok":true}` |
+| `GET /api/status` | — | `{"accounts":{"<konto>":{"connected":bool,"since":iso\|null,"last_error":string\|null}}}` |
+| `GET /api/settings` | erweitert | `{"signatures":{...},"notifications":{"<konto>":bool}}` (fehlender Eintrag = an) |
+| `PUT /api/settings` | akzeptiert zusätzlich `"notifications"` | `{"ok":true}` |
+
+Verhalten:
+- `batch-action`: EINE IMAP-Verbindung, Aktionen als Listen-Operation; `archive`
+  respektiert das Kategorie-Mapping pro Mail. Teilfehler → 502 mit Klartext.
+- `spam` verschiebt in den Junk-Ordner (SPECIAL-USE `\Junk` → Namenssuche
+  spam/junk/spamverdacht/werbung → anlegen „Spam"); `unspam` zurück in INBOX.
+- Klassifikations-Overrides tragen `"source":"user"` im Cache und werden von
+  der KI nie überschrieben.
+- SSE `GET /api/live` sendet zusätzlich `{"type":"status","account":string,"connected":bool}`.

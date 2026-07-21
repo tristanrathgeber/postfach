@@ -1,10 +1,11 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { QueryClient, QueryClientProvider, useMutation, useQueryClient } from '@tanstack/react-query'
-import type { Detail, Draft, MsgRef, Snippet, Summary } from './lib/types'
+import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import type { BatchAction, Detail, Draft, MsgRef, Snippet, Summary } from './lib/types'
 import { api, errText } from './lib/api'
 import { msgKey, refOf } from './lib/format'
 import { sortCategories } from './lib/categories'
 import { viewFolder, viewKey, viewTitle, type View } from './lib/view'
+import { isSpamFolder } from './lib/folders'
 import { createSequenceTracker, isEditableTarget, useGlobalKeydown } from './lib/keyboard'
 import {
   ALL_ACCOUNTS,
@@ -71,6 +72,12 @@ function Postfach() {
   const [accountSel, setAccountSel] = useState<string>(ALL_ACCOUNTS)
   const [view, setView] = useState<View>({ kind: 'inbox' })
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
+  // Mehrfachauswahl für die Bulk-Triage (msgKeys); Anker für Shift-Bereiche.
+  // Die Summary-Objekte werden mitgemerkt: fällt eine markierte Mail aus der
+  // sichtbaren Liste (Refetch, Ungelesen-Filter), wirkt die Aktion trotzdem.
+  const [checked, setChecked] = useState<ReadonlySet<string>>(new Set())
+  const checkedMsgsRef = useRef(new Map<string, Summary>())
+  const checkAnchorRef = useRef<string | null>(null)
   const [opened, setOpened] = useState<MsgRef | null>(null)
   const [composer, setComposer] = useState<{ id: number; state: ComposerState } | null>(null)
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -103,6 +110,8 @@ function Postfach() {
   )
 
   const folder = viewFolder(view)
+  // Ordner-Rolle (deckungsgleich mit dem Backend) — steuert die !-Richtung.
+  const inSpamView = isSpamFolder(folder)
   const searchActive = view.kind === 'search'
   const messagesAgg = useMessagesAggregate(accountNames, folder)
   // Sidebar-Zähler und Kategorien hängen immer an der INBOX, nicht an der
@@ -115,6 +124,9 @@ function Postfach() {
   const snippetsQuery = useSnippets()
   const settingsQuery = useSettings()
   const actions = useMailActions()
+  // Verbindungsstatus (Watcher) + alle konfigurierten Kategorien (Korrektur-Menü)
+  const statusQuery = useQuery({ queryKey: ['status'], queryFn: api.status, refetchInterval: 60_000 })
+  const categoriesQuery = useQuery({ queryKey: ['categories'], queryFn: api.categories, staleTime: Infinity })
 
   const visible = useMemo((): Summary[] => {
     if (view.kind === 'drafts') return [] // Entwürfe-Ansicht hat eine eigene Liste + Tastatursteuerung
@@ -164,9 +176,73 @@ function Postfach() {
     [visible, selectedIndex, scrollRowIntoView],
   )
 
+  // View-/Kontowechsel: Auswahl gehört zur sichtbaren Liste — leeren.
+  const viewIdent = `${viewKey(view)}|${accountSel}`
+  const prevViewIdentRef = useRef(viewIdent)
+  if (prevViewIdentRef.current !== viewIdent) {
+    prevViewIdentRef.current = viewIdent
+    if (checked.size > 0) setChecked(new Set())
+    checkAnchorRef.current = null
+  }
+
+  // --- Mehrfachauswahl (Bulk-Triage) ---
+  const toggleCheck = useCallback(
+    (msg: Summary, range: boolean) => {
+      const key = msgKey(msg)
+      setChecked((prev) => {
+        const next = new Set(prev)
+        if (range && checkAnchorRef.current) {
+          const a = visible.findIndex((m) => msgKey(m) === checkAnchorRef.current)
+          const b = visible.findIndex((m) => msgKey(m) === key)
+          if (a >= 0 && b >= 0) {
+            for (let i = Math.min(a, b); i <= Math.max(a, b); i++) {
+              next.add(msgKey(visible[i]))
+              checkedMsgsRef.current.set(msgKey(visible[i]), visible[i])
+            }
+            return next
+          }
+        }
+        if (next.has(key)) {
+          next.delete(key)
+          checkedMsgsRef.current.delete(key)
+        } else {
+          next.add(key)
+          checkedMsgsRef.current.set(key, msg)
+        }
+        return next
+      })
+      checkAnchorRef.current = key
+      setSelectedKey(key)
+    },
+    [visible],
+  )
+
+  const clearChecked = useCallback(() => {
+    setChecked(new Set())
+    checkedMsgsRef.current.clear()
+    checkAnchorRef.current = null
+  }, [])
+
+  const { mutate: bulkMutate } = actions.bulk
+  const runBulk = useCallback(
+    (action: BatchAction) => {
+      // Spam-Richtung wird HIER aufgelöst — Taste und Toolbar-Button teilen sie.
+      const resolved = action === 'spam' && inSpamView ? 'unspam' : action
+      const targets = [...checkedMsgsRef.current.values()]
+      if (targets.length === 0) return
+      bulkMutate({ targets, action: resolved })
+      if (resolved !== 'read' && resolved !== 'unread') {
+        const keys = new Set(targets.map(msgKey))
+        setOpened((cur) => (cur && keys.has(msgKey(cur)) ? null : cur))
+        setSelectedKey((cur) => (cur && keys.has(cur) ? null : cur))
+      }
+      clearChecked()
+    },
+    [inSpamView, bulkMutate, clearChecked],
+  )
+
   // --- Aktionen ---
   const { mutate: setSeenMutate } = actions.setSeen
-  const { mutate: moveMutate } = actions.move
   const { mutate: classifyMutate } = actions.classify
 
   const openMessage = useCallback(
@@ -188,15 +264,15 @@ function Postfach() {
   )
 
   const removeMessage = useCallback(
-    (ref: MsgRef, action: 'archive' | 'trash') => {
+    (ref: MsgRef, action: 'archive' | 'trash' | 'spam' | 'unspam') => {
       const key = msgKey(ref)
       const idx = visible.findIndex((m) => msgKey(m) === key)
       const next = idx >= 0 ? (visible[idx + 1] ?? visible[idx - 1]) : undefined
-      moveMutate({ ref, action })
+      bulkMutate({ targets: [ref], action })
       setSelectedKey((cur) => (cur === key ? (next ? msgKey(next) : null) : cur))
       setOpened((cur) => (cur && msgKey(cur) === key ? null : cur))
     },
-    [visible, moveMutate],
+    [visible, bulkMutate],
   )
 
   const runSortieren = useCallback(() => {
@@ -290,8 +366,11 @@ function Postfach() {
     }
     if (paletteOpen || composer || settingsOpen) return // Palette/Composer/Einstellungen behandeln Esc selbst
     if (e.key === 'Escape') {
-      // Esc-Priorität: Palette > Composer > Emilia > Suche
-      if (emiliaOpen) setEmiliaOpen(false)
+      // Esc-Priorität: Palette > Composer > Auswahl > Emilia > Suche.
+      // In Eingabefeldern gehört Esc dem Feld (Suchfeld leeren, Emilia-Input).
+      if (isEditableTarget(e)) return
+      if (checked.size > 0) clearChecked()
+      else if (emiliaOpen) setEmiliaOpen(false)
       else if (searchActive) clearSearch()
       return
     }
@@ -310,14 +389,25 @@ function Postfach() {
       case 'o':
         if (selectedMsg) openMessage(selectedMsg)
         break
+      case 'x':
+      case 'X':
+        if (selectedMsg) toggleCheck(selectedMsg, e.shiftKey)
+        break
       case 'e':
-        if (selectedMsg) removeMessage(refOf(selectedMsg), 'archive')
+        if (checked.size > 0) runBulk('archive')
+        else if (selectedMsg) removeMessage(refOf(selectedMsg), 'archive')
         break
       case '#':
-        if (selectedMsg) removeMessage(refOf(selectedMsg), 'trash')
+        if (checked.size > 0) runBulk('trash')
+        else if (selectedMsg) removeMessage(refOf(selectedMsg), 'trash')
+        break
+      case '!':
+        if (checked.size > 0) runBulk('spam')
+        else if (selectedMsg) removeMessage(refOf(selectedMsg), inSpamView ? 'unspam' : 'spam')
         break
       case 'u':
-        if (selectedMsg) toggleSeen(selectedMsg)
+        if (checked.size > 0) runBulk('read')
+        else if (selectedMsg) toggleSeen(selectedMsg)
         break
       case 'r':
         e.preventDefault()
@@ -485,7 +575,29 @@ function Postfach() {
     },
     [qc, showToast],
   )
-  useLiveEvents(onNewMail)
+  const lastConnectedRef = useRef(new Map<string, boolean>())
+  const onStatusChange = useCallback(
+    (account: string, connected: boolean) => {
+      qc.invalidateQueries({ queryKey: ['status'] })
+      const prev = lastConnectedRef.current.get(account)
+      lastConnectedRef.current.set(account, connected)
+      if (prev === undefined && connected) return // App-Start: erster Connect ist kein "wieder verbunden"
+      if (prev === connected) return
+      showToast(
+        connected ? `${account}: wieder verbunden.` : `${account}: Verbindung getrennt — verbinde neu …`,
+        connected ? 'info' : 'error',
+      )
+    },
+    [qc, showToast],
+  )
+  useLiveEvents(onNewMail, onStatusChange)
+
+  // Kategorie-Korrektur: Override speichern, Caches werden gepatcht.
+  const { mutate: overrideCategoryMutate } = actions.overrideCategory
+  const changeCategory = useCallback(
+    (detail: Detail, category: string) => overrideCategoryMutate({ ref: refOf(detail), category }),
+    [overrideCategoryMutate],
+  )
 
   return (
     <>
@@ -502,6 +614,7 @@ function Postfach() {
             unreadCount={unreadCount}
             draftsCount={draftsAgg.drafts.length}
             folders={foldersQuery.data ?? []}
+            status={statusQuery.data?.accounts ?? {}}
             onOpenSettings={() => setSettingsOpen(true)}
           />
         }
@@ -533,6 +646,11 @@ function Postfach() {
             onArchive={archiveMessage}
             onTrash={trashMessage}
             onToggleSeen={toggleSeen}
+            checked={checked}
+            onToggleCheck={toggleCheck}
+            onBulk={runBulk}
+            spamMode={inSpamView}
+            onClearChecked={clearChecked}
             onSortieren={runSortieren}
             sortierenPending={actions.classify.isPending}
             hasUnclassified={unclassified.length > 0}
@@ -550,6 +668,9 @@ function Postfach() {
             onArchive={(detail) => removeMessage(refOf(detail), 'archive')}
             onTrash={(detail) => removeMessage(refOf(detail), 'trash')}
             onToggleSeen={toggleSeen}
+            onToggleSpam={(detail, spam) => removeMessage(refOf(detail), spam ? 'spam' : 'unspam')}
+            categories={categoriesQuery.data ?? []}
+            onChangeCategory={changeCategory}
           />
         }
         aside={

@@ -20,6 +20,8 @@ import type {
   Settings,
   Snippet,
   Summary,
+  BatchAction,
+  AccountStatus,
 } from './types'
 
 const BASE = '/api'
@@ -154,6 +156,20 @@ export const api = {
 
   /** GET /api/settings */
   settings: (): Promise<Settings> => request('/settings'),
+
+  /** POST /api/batch-action — {ok, done}; Teilfehler kommen als 502 mit Klartext. */
+  batchAction: (body: { account: string; folder: string; uids: number[]; action: BatchAction }): Promise<{ ok: true; done: number }> =>
+    post('/batch-action', body),
+
+  /** POST /api/classify/override — Nutzer-Korrektur, schlägt die KI dauerhaft. */
+  classifyOverride: (body: { account: string; folder: string; uid: number; category: string }): Promise<{ ok: true }> =>
+    post('/classify/override', body),
+
+  /** GET /api/status — Watcher-Verbindungsstatus je Konto. */
+  status: (): Promise<{ accounts: Record<string, AccountStatus> }> => request('/status'),
+
+  /** GET /api/categories — alle konfigurierten Kategorien. */
+  categories: (): Promise<string[]> => request('/categories'),
 
   /** PUT /api/settings */
   putSettings: (body: Settings): Promise<{ ok: true }> => put('/settings', body),

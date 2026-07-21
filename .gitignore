@@ -10,5 +10,3 @@ node_modules/
 frontend/dist/
 .DS_Store
 dist/
-
-.claude/.simplify-nudge

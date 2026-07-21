@@ -2,10 +2,11 @@ import { useQuery } from '@tanstack/react-query'
 import { api, errText } from '../lib/api'
 import type { Detail, MsgRef } from '../lib/types'
 import { formatFullDate, formatSize } from '../lib/format'
+import { isSpamFolder } from '../lib/folders'
 import { Chip } from './Chip'
 import { EmptyState } from './EmptyState'
 import { HtmlMailFrame } from './HtmlMailFrame'
-import { ArchiveIcon, DownloadIcon, ForwardIcon, MailIcon, MailOpenIcon, PaperclipIcon, ReplyIcon, TrashIcon } from './Icons'
+import { AlertIcon, ArchiveIcon, DownloadIcon, ForwardIcon, MailIcon, MailOpenIcon, PaperclipIcon, ReplyIcon, TrashIcon } from './Icons'
 
 type ReaderProps = {
   opened: MsgRef | null
@@ -16,6 +17,11 @@ type ReaderProps = {
   onArchive: (detail: Detail) => void
   onTrash: (detail: Detail) => void
   onToggleSeen: (detail: Detail) => void
+  /** spam=true → in den Spam-Ordner; false → zurück in die Inbox. */
+  onToggleSpam: (detail: Detail, spam: boolean) => void
+  /** Alle konfigurierten Kategorien fürs Korrektur-Menü. */
+  categories: string[]
+  onChangeCategory: (detail: Detail, category: string) => void
 }
 
 function ActionButton({
@@ -51,7 +57,7 @@ function AddressLine({ label, value }: { label: string; value: string }) {
   )
 }
 
-export function Reader({ opened, imagesEnabled, onEnableImages, onReply, onForward, onArchive, onTrash, onToggleSeen }: ReaderProps) {
+export function Reader({ opened, imagesEnabled, onEnableImages, onReply, onForward, onArchive, onTrash, onToggleSeen, onToggleSpam, categories, onChangeCategory }: ReaderProps) {
   const detailQuery = useQuery({
     queryKey: ['message', opened?.account, opened?.folder, opened?.uid],
     queryFn: () => api.message(opened!.account, opened!.uid, opened!.folder),
@@ -96,7 +102,23 @@ export function Reader({ opened, imagesEnabled, onEnableImages, onReply, onForwa
               <h1 className="min-w-0 flex-1 text-[20px] font-semibold leading-snug">
                 {detail.subject || '(Kein Betreff)'}
               </h1>
-              {detail.category ? <Chip category={detail.category} className="mt-1 shrink-0" /> : null}
+              {detail.category ? (
+                <label className="relative mt-1 shrink-0 cursor-pointer" title="Kategorie ändern — deine Korrektur bleibt, die KI überschreibt sie nie">
+                  <Chip category={detail.category} />
+                  <select
+                    value={detail.category}
+                    onChange={(e) => onChangeCategory(detail, e.target.value)}
+                    aria-label="Kategorie ändern"
+                    className="absolute inset-0 cursor-pointer opacity-0"
+                  >
+                    {(categories.includes(detail.category) ? categories : [detail.category, ...categories]).map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
             </div>
             <div className="mt-3 space-y-0.5">
               <p className="min-w-0 truncate text-[13px]">
@@ -121,6 +143,13 @@ export function Reader({ opened, imagesEnabled, onEnableImages, onReply, onForwa
               </ActionButton>
               <ActionButton label="Papierkorb" hint="#" onClick={() => onTrash(detail)}>
                 <TrashIcon size={13} />
+              </ActionButton>
+              <ActionButton
+                label={isSpamFolder(detail.folder) ? 'Kein Spam' : 'Spam'}
+                hint="!"
+                onClick={() => onToggleSpam(detail, !isSpamFolder(detail.folder))}
+              >
+                <AlertIcon size={13} />
               </ActionButton>
               <ActionButton label={detail.seen ? 'Ungelesen' : 'Gelesen'} hint="u" onClick={() => onToggleSeen(detail)}>
                 {detail.seen ? <MailIcon size={13} /> : <MailOpenIcon size={13} />}

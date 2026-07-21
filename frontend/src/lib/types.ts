@@ -43,7 +43,7 @@ export type Classification = {
 }
 
 export type MessageAction = {
-  action: 'archive' | 'trash' | 'read' | 'unread' | 'label'
+  action: 'archive' | 'trash' | 'read' | 'unread' | 'label' | 'spam' | 'unspam'
   label?: string
   folder: string
 }
@@ -106,7 +106,17 @@ export type EmiliaImproveMode = 'korrigieren' | 'verbessern'
 // --- Batch 1 „Schreiben komplett" (Nachtrag v0.3, eingefroren 2026-07-21) ---
 
 /** GET/PUT /api/settings — Signaturen pro Konto (Plain-Text). */
-export type Settings = { signatures: Record<string, string> }
+export type Settings = {
+  signatures: Record<string, string>
+  /** Benachrichtigungen pro Konto; fehlender Eintrag = an. */
+  notifications: Record<string, boolean>
+}
+
+/** POST /api/batch-action — Bulk-Triage über EINE Verbindung, kein send. */
+export type BatchAction = 'read' | 'unread' | 'archive' | 'trash' | 'spam' | 'unspam'
+
+/** GET /api/status — Verbindungszustand der IMAP-IDLE-Watcher. */
+export type AccountStatus = { connected: boolean; since: string | null; last_error: string | null }
 
 /** GET /api/contacts?q=&limit=8 — Ranking: Häufigkeit×Aktualität, Sent-Empfänger doppelt. */
 export type Contact = { name: string; addr: string }

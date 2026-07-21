@@ -217,9 +217,87 @@ def action(request: Request, account: str, uid: int, body: ActionBody):
             if not body.label:
                 raise HTTPException(422, "label fehlt")
             box.move(body.folder, uid, agent_config.full_label(body.label), ensure=True)
+        elif body.action == "spam":
+            target = box.junk_folder()
+            if target != body.folder:  # Self-Move ist serverabhängig NO/UID-Wechsel
+                box.move(body.folder, uid, target)
+        elif body.action == "unspam":
+            if body.folder != "INBOX":
+                box.move(body.folder, uid, "INBOX")
         else:
             raise HTTPException(422, f"Unbekannte Aktion „{body.action}“")
     return {"ok": True}
+
+
+class BatchActionBody(BaseModel):
+    account: str
+    folder: str = "INBOX"
+    uids: list[int]
+    # Bewusst geschlossene Liste — insbesondere KEIN send.
+    action: Literal["read", "unread", "archive", "trash", "spam", "unspam"]
+
+
+@router.post("/batch-action")
+@_mailbox_errors
+def batch_action(request: Request, body: BatchActionBody):
+    """Bulk-Triage: EINE Verbindung, Listen-Operationen statt N Requests."""
+    acc = _account(request, body.account)
+    agent_config = request.app.state.config.agent
+    uids = sorted(set(body.uids))
+    if not uids:
+        return {"ok": True, "done": 0}
+    with request.app.state.open_mailbox(acc) as box:
+        if body.action in ("read", "unread"):
+            box.set_seen_many(body.folder, uids, body.action == "read")
+        elif body.action == "trash":
+            # Ziel EINMAL auflösen — trash() würde pro UID neu resolven.
+            box.move_many(body.folder, uids, box.trash_folder())
+        elif body.action == "spam":
+            target = box.junk_folder()
+            if target != body.folder:
+                box.move_many(body.folder, uids, target)
+        elif body.action == "unspam":
+            if body.folder != "INBOX":
+                box.move_many(body.folder, uids, "INBOX")
+        else:  # archive — Kategorie-Mapping gilt PRO Mail, also nach Ziel gruppieren
+            categories = request.app.state.ai.cached_categories(body.account, body.folder, uids)
+            by_target: dict[str, list[int]] = {}
+            for uid in uids:
+                category = categories.get(uid)
+                target = agent_config.folder_for(category) if category else box.archive_folder_default()
+                by_target.setdefault(target, []).append(uid)
+            for target, group in by_target.items():
+                box.move_many(body.folder, group, target, ensure=True)
+    return {"ok": True, "done": len(uids)}
+
+
+class ClassifyOverrideBody(BaseModel):
+    account: str
+    folder: str = "INBOX"
+    uid: int
+    category: str
+
+
+@router.post("/classify/override")
+def classify_override(request: Request, body: ClassifyOverrideBody):
+    _account(request, body.account)
+    valid = set(request.app.state.config.agent.taxonomy)
+    if body.category not in valid:
+        raise HTTPException(422, f"Unbekannte Kategorie „{body.category}“ — erlaubt: {sorted(valid)}")
+    request.app.state.ai.override_category(body.account, body.folder, body.uid, body.category)
+    return {"ok": True}
+
+
+@router.get("/status")
+def status(request: Request):
+    """Verbindungsstatus der IDLE-Watcher — nie still scheitern."""
+    return {"accounts": request.app.state.live.status_snapshot()}
+
+
+@router.get("/categories")
+def categories(request: Request):
+    """Alle konfigurierten Kategorien (fürs Korrektur-Menü im Reader)."""
+    return sorted(request.app.state.config.agent.taxonomy)
 
 
 @router.post("/classify")
@@ -387,7 +465,9 @@ class DraftSaveBody(BaseModel):
 
 
 class SettingsBody(BaseModel):
-    signatures: dict[str, str] = {}
+    # None = Sektion nicht anfassen (Teil-Update; Alt-Clients schicken nur signatures)
+    signatures: dict[str, str] | None = None
+    notifications: dict[str, bool] | None = None
 
 
 class SnippetItem(BaseModel):
@@ -454,6 +534,7 @@ async def events(request: Request, once: int = 0):
     async def stream():
         yield ": verbunden\n\n"
         last = state.snapshot()
+        last_status = state.status_snapshot()
         ticks = 0
         while True:
             if once and ticks > 0:
@@ -467,6 +548,16 @@ async def events(request: Request, once: int = 0):
                 if version != last.get(account, 0):
                     yield f"data: {json.dumps({'type': 'new_mail', 'account': account})}\n\n"
             last = now
+            # Verbindungsstatus-Wechsel sofort in die UI (nie still scheitern)
+            now_status = state.status_snapshot()
+            for account, entry in now_status.items():
+                if entry["connected"] != last_status.get(account, {}).get("connected"):
+                    yield (
+                        "data: "
+                        + json.dumps({"type": "status", "account": account, "connected": entry["connected"]})
+                        + "\n\n"
+                    )
+            last_status = now_status
             if ticks % 12 == 0:
                 yield ": ping\n\n"  # Keepalive gegen Proxy-/Idle-Timeouts
 

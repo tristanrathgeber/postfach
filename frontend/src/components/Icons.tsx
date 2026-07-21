@@ -86,6 +86,14 @@ export function GearIcon(p: IconProps) {
   )
 }
 
+export function CheckIcon(p: IconProps) {
+  return <Svg {...p} paths={['M4 12l5 5L20 6']} />
+}
+
+export function AlertIcon(p: IconProps) {
+  return <Svg {...p} paths={['M12 9v4', 'M12 17h.01', 'M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z']} />
+}
+
 export function SearchIcon(p: IconProps) {
   return <Svg {...p} paths={['M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z', 'm21 21-4.3-4.3']} />
 }

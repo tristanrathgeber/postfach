@@ -46,7 +46,10 @@ class EmiliaService:
     # --- Gedächtnis ---
 
     def index_folder(self, account: str, mailbox, folder: str, limit: int = 10000, owner_addr: str = "") -> int:
-        mails = mailbox.list_messages(folder, limit)
+        return self.index_mails(account, folder, mailbox.list_messages(folder, limit), owner_addr)
+
+    def index_mails(self, account: str, folder: str, mails: list, owner_addr: str = "") -> int:
+        """Kern ohne IMAP-Fetch — der Watcher-Hook hat die Mails schon geladen."""
         entries = [
             {
                 "account": account, "folder": folder, "uid": m.uid,

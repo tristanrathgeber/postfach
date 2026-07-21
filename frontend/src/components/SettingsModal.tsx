@@ -24,6 +24,7 @@ export function SettingsModal({ accounts, onClose }: SettingsModalProps) {
       <SettingsForm
         accounts={accounts}
         initialSignatures={settingsQuery.data.signatures}
+        initialNotifications={settingsQuery.data.notifications}
         initialSnippets={snippetsQuery.data}
         onClose={onClose}
       />
@@ -70,30 +71,35 @@ function ModalOverlay({ onDismiss, children }: { onDismiss: () => void; children
 function SettingsForm({
   accounts,
   initialSignatures,
+  initialNotifications,
   initialSnippets,
   onClose,
 }: {
   accounts: Account[]
   initialSignatures: Record<string, string>
+  initialNotifications: Record<string, boolean>
   initialSnippets: Snippet[]
   onClose: () => void
 }) {
   const { showToast } = useToast()
   const qc = useQueryClient()
   const [signatures, setSignatures] = useState<Record<string, string>>(initialSignatures)
+  const [notifications, setNotifications] = useState<Record<string, boolean>>(initialNotifications)
   const [snippets, setSnippets] = useState<Snippet[]>(initialSnippets)
 
   const cleanedSnippets = snippets
     .map((s) => ({ abbrev: s.abbrev.trim(), title: s.title.trim(), text: s.text }))
     .filter((s) => s.abbrev || s.title || s.text.trim())
 
-  const signaturesDirty = JSON.stringify(signatures) !== JSON.stringify(initialSignatures)
+  const settingsDirty =
+    JSON.stringify(signatures) !== JSON.stringify(initialSignatures) ||
+    JSON.stringify(notifications) !== JSON.stringify(initialNotifications)
   const snippetsDirty = JSON.stringify(cleanedSnippets) !== JSON.stringify(initialSnippets)
 
   const saveMutation = useMutation({
     mutationFn: () =>
       Promise.all([
-        signaturesDirty ? api.putSettings({ signatures }) : Promise.resolve({ ok: true as const }),
+        settingsDirty ? api.putSettings({ signatures, notifications }) : Promise.resolve({ ok: true as const }),
         snippetsDirty ? api.putSnippets(cleanedSnippets) : Promise.resolve({ ok: true as const }),
       ]),
     onSuccess: () => {
@@ -108,7 +114,7 @@ function SettingsForm({
 
   const requestClose = () => {
     if (saveMutation.isPending) return
-    if (signaturesDirty || snippetsDirty) saveMutation.mutate()
+    if (settingsDirty || snippetsDirty) saveMutation.mutate()
     else onClose()
   }
 
@@ -168,6 +174,28 @@ function SettingsForm({
           </div>
         </section>
 
+        {/* Benachrichtigungen */}
+        <section>
+          <h3 className="font-mono text-[9.5px] uppercase tracking-[0.1em] text-muted">Benachrichtigungen</h3>
+          <p className="mt-0.5 text-[11.5px] text-muted">
+            Native macOS-Meldung bei neuer Mail (Absender + Betreff) — pro Konto schaltbar.
+          </p>
+          <div className="mt-2 space-y-1.5">
+            {accounts.map((a) => (
+              <label key={a.name} className="flex cursor-pointer items-center gap-2 text-[13px]">
+                <input
+                  type="checkbox"
+                  checked={notifications[a.name] ?? true}
+                  onChange={(e) => setNotifications((prev) => ({ ...prev, [a.name]: e.target.checked }))}
+                  className="accent-tinte"
+                />
+                {a.name}
+                <span className="font-mono text-[10.5px] text-muted">{a.address}</span>
+              </label>
+            ))}
+          </div>
+        </section>
+
         {/* Snippets */}
         <section>
           <h3 className="font-mono text-[9.5px] uppercase tracking-[0.1em] text-muted">Snippets</h3>
@@ -223,7 +251,7 @@ function SettingsForm({
 
       <footer className="flex items-center gap-2 border-t border-hairline px-4 py-3">
         <span className="font-mono text-[10px] text-muted">
-          {signaturesDirty || snippetsDirty ? 'Ungespeicherte Änderungen' : 'Alles gespeichert'}
+          {settingsDirty || snippetsDirty ? 'Ungespeicherte Änderungen' : 'Alles gespeichert'}
         </span>
         <span className="flex-1" />
         <button

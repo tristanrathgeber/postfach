@@ -21,10 +21,11 @@ _RECONNECT_BACKOFF = [5, 15, 60, 180]
 
 
 class LiveState:
-    """Thread-sicherer Versionszähler je Konto (SSE-Quelle)."""
+    """Thread-sicher: Versionszähler je Konto (SSE-Quelle) + Verbindungsstatus."""
 
     def __init__(self) -> None:
         self._versions: dict[str, int] = {}
+        self._status: dict[str, dict] = {}
         self._lock = threading.Lock()
 
     def bump(self, account: str) -> None:
@@ -35,6 +36,31 @@ class LiveState:
         with self._lock:
             return dict(self._versions)
 
+    def set_status(self, account: str, connected: bool, error: str | None = None) -> None:
+        """Nie still scheitern: Zustandswechsel werden sichtbar gemacht.
+        `since` = Zeitpunkt des letzten Wechsels (verbunden seit / getrennt seit)."""
+        from datetime import datetime
+
+        with self._lock:
+            prev = self._status.get(account)
+            since = (
+                prev["since"]
+                if prev is not None and prev["connected"] == connected
+                else datetime.now().isoformat(timespec="seconds")
+            )
+            self._status[account] = {"connected": connected, "since": since, "last_error": error}
+
+    def status_snapshot(self) -> dict[str, dict]:
+        with self._lock:
+            return {name: dict(entry) for name, entry in self._status.items()}
+
+
+def _has_new_mail(responses) -> bool:
+    return any(
+        isinstance(item, tuple) and len(item) >= 2 and item[1] == b"EXISTS"
+        for item in (responses or [])
+    )
+
 
 class AccountWatcher:
     """Kern ohne Threading — testbar über poll_once mit injiziertem Client."""
@@ -44,19 +70,19 @@ class AccountWatcher:
         self._state = state
         self._on_new_mail = on_new_mail
 
+    def notify_new_mail(self) -> None:
+        self._state.bump(self.account)
+        if self._on_new_mail is not None:
+            try:
+                self._on_new_mail(self.account)
+            except Exception:
+                log.exception("new-mail-Hook für %s fehlgeschlagen", self.account)
+
     def poll_once(self, client) -> bool:
         responses = client.idle_check(timeout=_IDLE_CHECK_SECONDS)
-        has_new = any(
-            isinstance(item, tuple) and len(item) >= 2 and item[1] == b"EXISTS"
-            for item in (responses or [])
-        )
+        has_new = _has_new_mail(responses)
         if has_new:
-            self._state.bump(self.account)
-            if self._on_new_mail is not None:
-                try:
-                    self._on_new_mail(self.account)
-                except Exception:
-                    log.exception("new-mail-Hook für %s fehlgeschlagen", self.account)
+            self.notify_new_mail()
         return has_new
 
 
@@ -75,6 +101,7 @@ def start_watcher_thread(
             try:
                 client = connect()
                 client.select_folder("INBOX", readonly=True)
+                state.set_status(account_name, connected=True)
                 backoff = 0
                 idle_started = time.monotonic()
                 client.idle()
@@ -82,7 +109,11 @@ def start_watcher_thread(
                     while True:
                         watcher.poll_once(client)
                         if time.monotonic() - idle_started > _REIDLE_AFTER_SECONDS:
-                            client.idle_done()
+                            # idle_done → (command_text, responses): ein EXISTS
+                            # im Erneuerungsfenster darf nicht verloren gehen.
+                            _text, pending = client.idle_done()
+                            if _has_new_mail(pending):
+                                watcher.notify_new_mail()
                             client.idle()
                             idle_started = time.monotonic()
                 finally:
@@ -92,6 +123,7 @@ def start_watcher_thread(
                     except Exception:
                         pass
             except Exception as exc:
+                state.set_status(account_name, connected=False, error=str(exc))
                 wait = _RECONNECT_BACKOFF[min(backoff, len(_RECONNECT_BACKOFF) - 1)]
                 backoff += 1
                 log.warning("Watcher %s: %s — neuer Versuch in %ss", account_name, exc, wait)

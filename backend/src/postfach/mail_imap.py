@@ -18,6 +18,7 @@ from email_agent.textutil import html_to_text
 _TRASH_NAMES = {"trash", "papierkorb", "gelöscht", "deleted items", "deleted messages", "gelöschte objekte", "geloeschte objekte"}
 _SENT_NAMES = {"sent", "sent items", "sent messages", "gesendet", "gesendete objekte", "gesendete elemente"}
 _ARCHIVE_NAMES = {"archive", "archiv", "all mail", "alle nachrichten"}
+_JUNK_NAMES = {"spam", "junk", "junk-e-mail", "spamverdacht", "werbung", "bulk mail"}
 
 
 def is_sent_folder(folder: str) -> bool:
@@ -255,21 +256,41 @@ class Mailbox:
         return fallback
 
     def move(self, folder: str, uid: int, target: str, ensure: bool = False) -> None:
+        self.move_many(folder, [uid], target, ensure)
+
+    # imapclient joint UIDs unkomprimiert — sehr lange Listen sprengen die
+    # IMAP-Kommandozeile mancher Server (~8 KB). Blockweise senden.
+    _UID_CHUNK = 500
+
+    def move_many(self, folder: str, uids: list[int], target: str, ensure: bool = False) -> None:
+        """Bulk-Triage: IMAP-MOVE mit UID-Liste statt N Einzeloperationen."""
+        if not uids:
+            return
         if ensure and target not in set(self.list_folders()):
             self._client.create_folder(target)
         self._client.select_folder(folder, readonly=False)
-        self._client.move([uid], target)
+        for i in range(0, len(uids), self._UID_CHUNK):
+            self._client.move(uids[i : i + self._UID_CHUNK], target)
 
     def set_seen(self, folder: str, uid: int, seen: bool) -> None:
+        self.set_seen_many(folder, [uid], seen)
+
+    def set_seen_many(self, folder: str, uids: list[int], seen: bool) -> None:
+        if not uids:
+            return
         self._client.select_folder(folder, readonly=False)
-        if seen:
-            self._client.add_flags([uid], [b"\\Seen"], silent=True)
-        else:
-            self._client.remove_flags([uid], [b"\\Seen"], silent=True)
+        flag_op = self._client.add_flags if seen else self._client.remove_flags
+        for i in range(0, len(uids), self._UID_CHUNK):
+            flag_op(uids[i : i + self._UID_CHUNK], [b"\\Seen"], silent=True)
 
     def trash(self, folder: str, uid: int) -> None:
-        target = self._resolve(b"\\Trash", _TRASH_NAMES, "Trash")
-        self.move(folder, uid, target)
+        self.move(folder, uid, self.trash_folder())
+
+    def trash_folder(self) -> str:
+        return self._resolve(b"\\Trash", _TRASH_NAMES, "Trash")
+
+    def junk_folder(self) -> str:
+        return self._resolve(b"\\Junk", _JUNK_NAMES, "Spam")
 
     def archive_folder_default(self) -> str:
         return self._resolve(b"\\Archive", _ARCHIVE_NAMES, "Archive")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import threading
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -129,13 +130,34 @@ def create_app(root: Path | None = None, demo: bool | None = None, mailbox_facto
         if mailbox_factory is None:
             from imapclient import IMAPClient
 
+            # Wasserstand pro Konto: bis zu welcher UID wurde schon benachrichtigt
+            # (verhindert Doppel-Meldungen bei Re-IDLE/EXPUNGE-Echos).
+            notified_uid: dict[str, int] = {}
+            notify_lock = threading.Lock()
+
             def _index_new_mail(account_name: str) -> None:
-                # Neue Mails direkt in Emilias Gedächtnis aufnehmen (Best Effort).
+                # Neue Mails in Emilias Gedächtnis aufnehmen und (falls pro
+                # Konto aktiviert) nativ melden — EIN Fetch für beides, Best Effort.
+                from .notify import notify_macos, pick_new_unseen
+
                 account = app.state.accounts[account_name]
                 with open_mailbox(account) as box:
-                    app.state.emilia.index_folder(
-                        account_name, box, "INBOX", limit=10, owner_addr=account.address
+                    mails = box.list_messages("INBOX", 10)
+                app.state.emilia.index_mails(account_name, "INBOX", mails, owner_addr=account.address)
+                with notify_lock:
+                    last = notified_uid.get(account_name)
+                    if last is None:
+                        # Erster Push seit App-Start: nur die neueste Mail melden
+                        # (der Rest ist Bestand), Wasserstand auf Max setzen.
+                        fresh = [m for m in mails[:1] if not m.seen]
+                    else:
+                        fresh = pick_new_unseen(mails, last)
+                    notified_uid[account_name] = max(
+                        (m.uid for m in mails), default=notified_uid.get(account_name, 0)
                     )
+                if app.state.settings.notifications_enabled(account_name):
+                    for m in fresh:
+                        notify_macos(m.from_name or m.from_addr, m.subject or "(kein Betreff)")
 
             def _watch_connect_for(account: MailAccount):
                 def connect():

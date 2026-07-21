@@ -2,16 +2,20 @@ import { memo } from 'react'
 import type { Summary } from '../lib/types'
 import { formatListDate, msgKey } from '../lib/format'
 import { Chip } from './Chip'
-import { ArchiveIcon, MailIcon, MailOpenIcon, PaperclipIcon, TrashIcon } from './Icons'
+import { ArchiveIcon, CheckIcon, MailIcon, MailOpenIcon, PaperclipIcon, TrashIcon } from './Icons'
 
 type MessageRowProps = {
   msg: Summary
   index: number
   selected: boolean
+  checked: boolean
+  anyChecked: boolean
   onOpen: (msg: Summary) => void
   onArchive: (msg: Summary) => void
   onTrash: (msg: Summary) => void
   onToggleSeen: (msg: Summary) => void
+  /** Auswahl togglen; mit range=true (Shift) bis zum letzten Anker erweitern. */
+  onToggleCheck: (msg: Summary, range: boolean) => void
 }
 
 function QuickAction({
@@ -43,10 +47,13 @@ export const MessageRow = memo(function MessageRow({
   msg,
   index,
   selected,
+  checked,
+  anyChecked,
   onOpen,
   onArchive,
   onTrash,
   onToggleSeen,
+  onToggleCheck,
 }: MessageRowProps) {
   const unread = !msg.seen
   return (
@@ -54,15 +61,42 @@ export const MessageRow = memo(function MessageRow({
       data-msg={msgKey(msg)}
       role="button"
       tabIndex={-1}
-      onClick={() => onOpen(msg)}
+      onClick={(e) => {
+        // Shift-Klick erweitert die Auswahl statt zu öffnen; bei aktiver
+        // Auswahl togglet jeder Klick (Triage-Modus wie in Gmail).
+        if (e.shiftKey) onToggleCheck(msg, true)
+        else if (anyChecked) onToggleCheck(msg, false)
+        else onOpen(msg)
+      }}
       className={`row-enter group relative cursor-pointer border-b border-hairline px-4 py-2.5 transition ${
-        selected ? 'bg-[#EFF2FB]' : 'hover:bg-[#F8F7F4]'
+        checked ? 'bg-[#E9EDFA]' : selected ? 'bg-[#EFF2FB]' : 'hover:bg-[#F8F7F4]'
       }`}
       style={{ animationDelay: `${Math.min(index, 15) * 22}ms` }}
     >
-      {selected ? <span className="absolute inset-y-0 left-0 w-[2px] bg-tinte" aria-hidden="true" /> : null}
+      {selected && !checked ? (
+        <span className="absolute inset-y-0 left-0 w-[2px] bg-tinte" aria-hidden="true" />
+      ) : null}
 
       <div className="flex items-center gap-1.5">
+        <button
+          type="button"
+          aria-label={checked ? 'Auswahl entfernen' : 'Auswählen'}
+          aria-pressed={checked}
+          title="Auswählen (x) · Shift-Klick für Bereich"
+          onClick={(e) => {
+            e.stopPropagation()
+            onToggleCheck(msg, e.shiftKey)
+          }}
+          className={`flex h-[15px] w-[15px] shrink-0 items-center justify-center rounded-full border transition ${
+            checked
+              ? 'border-tinte bg-tinte text-white'
+              : anyChecked
+                ? 'border-hairline bg-paper text-transparent hover:border-tinte'
+                : 'border-hairline bg-paper text-transparent opacity-0 hover:border-tinte group-hover:opacity-100'
+          }`}
+        >
+          <CheckIcon size={9} />
+        </button>
         {unread ? <span className="h-[6px] w-[6px] shrink-0 rounded-full bg-unread" aria-label="Ungelesen" /> : null}
         <span className={`min-w-0 flex-1 truncate text-[13px] ${unread ? 'font-semibold' : ''}`}>
           {msg.from_name || msg.from_addr}
@@ -73,7 +107,7 @@ export const MessageRow = memo(function MessageRow({
         </span>
       </div>
 
-      <div className="mt-0.5 flex items-center gap-2">
+      <div className="mt-0.5 flex items-center gap-2 pl-[21px]">
         <p className="min-w-0 flex-1 truncate text-[12.5px]">
           <span className={unread ? 'font-medium' : ''}>{msg.subject || '(Kein Betreff)'}</span>
           {msg.snippet ? <span className="text-muted"> — {msg.snippet}</span> : null}

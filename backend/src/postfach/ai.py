@@ -79,7 +79,12 @@ class AiService:
             with self._lock:
                 cache = self._load_cache()
                 for uid, entry in fresh.items():
-                    cache[self._key(account, folder, uid)] = entry
+                    key = self._key(account, folder, uid)
+                    # Während des LLM-Laufs kann ein User-Override eingetroffen
+                    # sein — Nutzerkorrekturen schlagen die KI, immer.
+                    if cache.get(key, {}).get("source") == "user":
+                        continue
+                    cache[key] = entry
                 self._save_cache(cache)
         return {
             m.uid: cache[self._key(account, folder, m.uid)]
@@ -101,6 +106,26 @@ class AiService:
             }
             for clf in classifications
         }
+
+    def override_category(self, account: str, folder: str, uid: int, category: str) -> None:
+        """Nutzer-Korrektur: schlägt die KI dauerhaft. classify() füllt nur
+        FEHLENDE Keys — ein vorhandener Override wird also nie überschrieben."""
+        defaults = {
+            "is_newsletter": False,
+            "interesting": False,
+            "needs_reply": False,
+            "reason": "Vom Nutzer einsortiert",
+        }
+        with self._lock:
+            cache = self._load_cache()
+            entry = cache.get(self._key(account, folder, uid), {})
+            cache[self._key(account, folder, uid)] = {
+                **defaults,
+                **entry,
+                "category": category,
+                "source": "user",
+            }
+            self._save_cache(cache)
 
     def cached_categories(self, account: str, folder: str, uids: list[int]) -> dict[int, str]:
         """Ein Cache-Read pro Request statt einem pro Mail-Zeile."""
