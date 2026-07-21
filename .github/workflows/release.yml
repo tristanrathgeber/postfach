@@ -21,9 +21,9 @@ jobs:
           repository: tristanrathgeber/email-agent
           path: email-agent
       - uses: astral-sh/setup-uv@v5
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '22'
       - name: Postfach.app bauen (PyInstaller)
         working-directory: postfach
         run: ./scripts/build_app.sh

@@ -290,8 +290,18 @@ def test_snooze_from_snooze_folder_updates_job_without_move(client):
 
 
 def test_followup_check_handles_timezone_offsets():
-    # Antwort mit UTC-Header (12:30+00:00) NACH lokalem Versand (14:00 naive/+02:00)
+    # Eine Antwort mit UTC-Header muss korrekt gegen die naive lokale
+    # Follow-up-Zeit (aus datetime.now()) verglichen werden — die Antwortzeiten
+    # aus der Referenz ableiten, damit der Test in JEDER Zeitzone stimmt
+    # (fest kodierte Offsets bestanden nur auf UTC+2-Rechnern, nicht im UTC-CI).
+    from datetime import datetime, timedelta, timezone
+
     from postfach.schedule import is_later
 
-    assert is_later("2026-07-19T12:30:00+00:00", "2026-07-19T14:00:00")
-    assert not is_later("2026-07-19T11:00:00+00:00", "2026-07-19T14:00:00")
+    reference = datetime.now().replace(microsecond=0)  # naive lokale Wanduhr
+    instant = reference.astimezone()  # als lokaler Zeitpunkt interpretiert
+    reply_after = (instant + timedelta(minutes=30)).astimezone(timezone.utc).isoformat()
+    reply_before = (instant - timedelta(minutes=30)).astimezone(timezone.utc).isoformat()
+
+    assert is_later(reply_after, reference.isoformat())
+    assert not is_later(reply_before, reference.isoformat())
