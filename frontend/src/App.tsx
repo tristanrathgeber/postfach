@@ -9,6 +9,7 @@ import { isSpamFolder } from './lib/folders'
 import { createSequenceTracker, isEditableTarget, useGlobalKeydown } from './lib/keyboard'
 import {
   ALL_ACCOUNTS,
+  patchSearchData,
   useAccounts,
   useDraftsAggregate,
   useFolders,
@@ -141,6 +142,9 @@ function Postfach() {
   const screenerAgg = useScreenerAggregate(accountNames)
   const snippetsQuery = useSnippets()
   const settingsQuery = useSettings()
+  // Globaler KI-Schalter: KI-UI erst zeigen, wenn die Settings es bestätigen —
+  // sonst blitzt der Emilia-Knopf bei deaktivierter KI kurz auf.
+  const aiEnabled = settingsQuery.data?.ai_enabled ?? false
   const actions = useMailActions()
   // Verbindungsstatus (Watcher) + alle konfigurierten Kategorien (Korrektur-Menü)
   const statusQuery = useQuery({ queryKey: ['status'], queryFn: api.status, refetchInterval: 60_000 })
@@ -377,7 +381,7 @@ function Postfach() {
       // Optimistisch aus den Listen — die Mail wandert in den Ordner „Später".
       const removeRow = (old: Summary[] | undefined) => old?.filter((m) => !(m.account === ref.account && m.folder === ref.folder && m.uid === ref.uid))
       qc.setQueriesData<Summary[]>({ queryKey: ['messages'] }, removeRow)
-      qc.setQueriesData<Summary[]>({ queryKey: ['search'] }, removeRow)
+      patchSearchData(qc, removeRow)
     },
     onSuccess: (_d, { ref, until }) => {
       qc.invalidateQueries({ queryKey: ['reminders'] })
@@ -468,7 +472,7 @@ function Postfach() {
     }
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'j') {
       e.preventDefault()
-      setEmiliaOpen((v) => !v)
+      if (aiEnabled) setEmiliaOpen((v) => !v)
       return
     }
     if (paletteOpen || composer || settingsOpen) return // Palette/Composer/Einstellungen behandeln Esc selbst
@@ -591,15 +595,17 @@ function Postfach() {
         run: () => toggleSeen(msg),
       })
     }
-    list.push({ id: 'sortieren', group: 'Aktionen', label: 'Sortieren', keywords: ['klassifizieren'], run: runSortieren })
-    list.push({
-      id: 'emilia',
-      group: 'Aktionen',
-      label: 'Emilia öffnen/schließen',
-      shortcut: '⌘J',
-      keywords: ['assistent', 'ki', 'chat'],
-      run: () => setEmiliaOpen((v) => !v),
-    })
+    if (aiEnabled) {
+      list.push({ id: 'sortieren', group: 'Aktionen', label: 'Sortieren', keywords: ['klassifizieren'], run: runSortieren })
+      list.push({
+        id: 'emilia',
+        group: 'Aktionen',
+        label: 'Emilia öffnen/schließen',
+        shortcut: '⌘J',
+        keywords: ['assistent', 'ki', 'chat'],
+        run: () => setEmiliaOpen((v) => !v),
+      })
+    }
     list.push({
       id: 'einstellungen',
       group: 'Aktionen',
@@ -647,6 +653,7 @@ function Postfach() {
     return list
   }, [
     accounts,
+    aiEnabled,
     categories,
     composeNew,
     composer,
@@ -808,7 +815,10 @@ function Postfach() {
             onClearChecked={clearChecked}
             onSortieren={runSortieren}
             sortierenPending={actions.classify.isPending}
-            hasUnclassified={unclassified.length > 0}
+            hasUnclassified={aiEnabled && unclassified.length > 0}
+            nlQuery={searchActive ? searchAgg.nlQuery : null}
+            failureDetail={searchActive ? searchAgg.failureDetail : null}
+            aiEnabled={aiEnabled}
             emptyOverride={emptyOverride}
           />
           )
@@ -828,6 +838,7 @@ function Postfach() {
             categories={categoriesQuery.data ?? []}
             onChangeCategory={changeCategory}
             onOpenThreadMail={openMessage}
+            aiEnabled={aiEnabled}
             onThreadAction={(mails, action) => {
               bulkMutate({ targets: mails, action })
               const keys = new Set(mails.map(msgKey))
@@ -836,7 +847,7 @@ function Postfach() {
           />
         }
         aside={
-          emiliaOpen ? (
+          emiliaOpen && aiEnabled ? (
             <EmiliaPanel
               account={emiliaAccount}
               context={emiliaContext}
@@ -846,7 +857,7 @@ function Postfach() {
           ) : undefined
         }
       />
-      {!emiliaOpen ? (
+      {!emiliaOpen && aiEnabled ? (
         <button
           type="button"
           onClick={() => setEmiliaOpen(true)}
@@ -863,6 +874,7 @@ function Postfach() {
           state={composer.state}
           accounts={accounts}
           signatures={settingsQuery.data?.signatures ?? {}}
+          aiEnabled={aiEnabled}
           snippetInsertRef={snippetInsertRef}
           persistRef={composerPersistRef}
           modalAbove={settingsOpen}

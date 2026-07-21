@@ -167,7 +167,8 @@ def create_app(root: Path | None = None, demo: bool | None = None, mailbox_facto
                             mails = kept  # weder indexieren (neue UID im Ziel) noch melden
                         except Exception:
                             log.exception("Aussortieren fehlgeschlagen (%s)", account_name)
-                app.state.emilia.index_mails(account_name, "INBOX", mails, owner_addr=account.address)
+                app.state.emilia.index_mails(account_name, "INBOX", mails, owner_addr=account.address,
+                                             embed=app.state.settings.ai_enabled())
                 app.state.search.add_mails(account_name, "INBOX", mails)
                 with notify_lock:
                     last = notified_uid.get(account_name)

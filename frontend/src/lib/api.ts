@@ -10,6 +10,9 @@ import type {
   ScreenerEntry,
   Subscription,
   UnsubscribeResult,
+  EmiliaStreamEvent,
+  NlSearchResult,
+  ThreadSummary,
   ThreadMail,
   Account,
   Classification,
@@ -239,4 +242,77 @@ export const api = {
   /** POST /api/screener/decide — allow/block; block = Nutzer-Regel für den Watcher. */
   screenerDecide: (body: { account: string; addr: string; decision: 'allow' | 'block' }): Promise<{ ok: true }> =>
     post('/screener/decide', body),
+
+  // --- Emilia II (Nachtrag v0.9) ---
+
+  /**
+   * POST /api/emilia/chat/stream — NDJSON: {"sources"} → {"delta"}× → {"done"}.
+   * Ruft onEvent pro Zeile; wirft ApiError bei HTTP-Fehlern vor Stream-Beginn.
+   */
+  emiliaChatStream: async (
+    body: EmiliaChatRequest,
+    onEvent: (e: EmiliaStreamEvent) => void,
+    signal?: AbortSignal,
+  ): Promise<void> => {
+    let res: Response
+    try {
+      res = await fetch(`${BASE}/emilia/chat/stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal,
+      })
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') return
+      throw new ApiError(0, 'Backend nicht erreichbar')
+    }
+    if (!res.ok || !res.body) {
+      let detail = `Fehler ${res.status}`
+      try {
+        const data = (await res.json()) as { detail?: string }
+        if (typeof data.detail === 'string') detail = data.detail
+      } catch {
+        // Body war kein JSON — generische Meldung behalten.
+      }
+      throw new ApiError(res.status, detail)
+    }
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    const emit = (line: string) => {
+      // Eine kaputte Zeile darf nie den restlichen Stream verwerfen.
+      try {
+        onEvent(JSON.parse(line) as EmiliaStreamEvent)
+      } catch {
+        // defekte Zeile überspringen
+      }
+    }
+    try {
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        let newline
+        while ((newline = buffer.indexOf('\n')) >= 0) {
+          const line = buffer.slice(0, newline).trim()
+          buffer = buffer.slice(newline + 1)
+          if (line) emit(line)
+        }
+      }
+      // Abgeschnittene Streams (Proxy, Crash): letztes Fragment ohne \n flushen —
+      // sonst geht ausgerechnet die Fehlerzeile verloren.
+      const rest = (buffer + decoder.decode()).trim()
+      if (rest) emit(rest)
+    } finally {
+      reader.cancel().catch(() => {})
+    }
+  },
+
+  /** GET /api/search/nl — Emilia übersetzt in Operatoren; 409 ohne Voll-Index. */
+  searchNl: (account: string, q: string): Promise<NlSearchResult> =>
+    request(`/search/nl?account=${enc(account)}&q=${enc(q)}`),
+
+  /** POST /api/emilia/thread_summary — Zusammenfassung NUR auf Klick. */
+  threadSummary: (body: { account: string; folder: string; uid: number }): Promise<ThreadSummary> =>
+    post('/emilia/thread_summary', body),
 }

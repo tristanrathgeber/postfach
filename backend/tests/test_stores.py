@@ -5,7 +5,7 @@ from postfach.stores import DraftStore, SettingsStore, SnippetStore
 
 def test_settings_roundtrip_and_default(tmp_path):
     store = SettingsStore(tmp_path / "settings.json")
-    assert store.get() == {"signatures": {}, "notifications": {}, "undo_seconds": 15}
+    assert store.get() == {"signatures": {}, "notifications": {}, "undo_seconds": 15, "ai_enabled": True}
     store.put({"signatures": {"gmx": "Viele Grüße\nTristan"}})
     assert store.get()["signatures"]["gmx"].startswith("Viele Grüße")
 

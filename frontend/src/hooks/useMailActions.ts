@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient, type QueryClient } from '@tanstack/react-query'
+import { patchSearchData } from './useMailData'
 import { api, errText } from '../lib/api'
 import { msgKey, sameMsg } from '../lib/format'
 import { useToast } from '../components/Toast'
@@ -39,7 +40,7 @@ function resyncAfterError(qc: QueryClient, ref: MsgRef) {
 function patchMessage(qc: QueryClient, ref: MsgRef, patch: Partial<Summary>) {
   const patchList = (old: Summary[] | undefined) => old?.map((m) => (sameMsg(m, ref) ? { ...m, ...patch } : m))
   qc.setQueriesData<Summary[]>({ queryKey: ['messages'] }, patchList)
-  qc.setQueriesData<Summary[]>({ queryKey: ['search'] }, patchList)
+  patchSearchData(qc, patchList)
   qc.setQueryData<Detail>(['message', ref.account, ref.folder, ref.uid], (old) => (old ? { ...old, ...patch } : old))
 }
 
@@ -95,11 +96,11 @@ export function useMailActions() {
         const patchRows = (old: Summary[] | undefined) =>
           old?.map((m) => (hit(m) ? { ...m, seen: action === 'read' } : m))
         qc.setQueriesData<Summary[]>({ queryKey: ['messages'] }, patchRows)
-        qc.setQueriesData<Summary[]>({ queryKey: ['search'] }, patchRows)
+        patchSearchData(qc, patchRows)
       } else {
         const removeRows = (old: Summary[] | undefined) => old?.filter((m) => !hit(m))
         qc.setQueriesData<Summary[]>({ queryKey: ['messages'] }, removeRows)
-        qc.setQueriesData<Summary[]>({ queryKey: ['search'] }, removeRows)
+        patchSearchData(qc, removeRows)
       }
     },
     onSuccess: ({ failed }, { targets, action }) => {

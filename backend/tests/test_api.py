@@ -156,7 +156,7 @@ def test_gmail_provider_skips_sent_append(tmp_path, monkeypatch):
 
 
 def test_settings_drafts_snippets_roundtrip(client):
-    assert client.get("/api/settings").json() == {"signatures": {}, "notifications": {}, "undo_seconds": 0}
+    assert client.get("/api/settings").json() == {"signatures": {}, "notifications": {}, "undo_seconds": 0, "ai_enabled": True}
     assert client.put("/api/settings", json={"signatures": {"demo": "-- \nAlex"}}).json() == {"ok": True}
     assert client.get("/api/settings").json()["signatures"]["demo"] == "-- \nAlex"
 

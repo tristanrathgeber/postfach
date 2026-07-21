@@ -36,6 +36,7 @@ export function Composer({
   state,
   accounts,
   signatures,
+  aiEnabled = true,
   snippetInsertRef,
   persistRef,
   modalAbove = false,
@@ -45,6 +46,8 @@ export function Composer({
   accounts: Account[]
   /** Signaturen pro Konto (aus den Einstellungen) — synchron beim Öffnen eingefügt. */
   signatures: Record<string, string>
+  /** Globaler KI-Schalter: aus blendet die komplette Emilia-Leiste aus. */
+  aiEnabled?: boolean
   /** ⌘K-Palette fügt darüber Snippets an der Cursor-Position ein. */
   snippetInsertRef?: MutableRefObject<((snip: Snippet) => void) | null>
   /** App sichert darüber den Entwurf, bevor sie den Composer ersetzt (⌘K-Aktionen). */
@@ -677,6 +680,8 @@ export function Composer({
         </div>
 
         <footer className="flex items-center gap-2 border-t border-hairline px-4 py-3">
+          {aiEnabled ? (
+          <>
           <button
             type="button"
             onClick={() => draftMutation.mutate()}
@@ -705,6 +710,24 @@ export function Composer({
           >
             {improveMutation.isPending ? <SpinnerIcon size={12} /> : 'Verbessern'}
           </button>
+          <select
+            value=""
+            onChange={(e) => {
+              const mode = e.target.value as EmiliaImproveMode | ''
+              if (mode) improveMutation.mutate(mode)
+            }}
+            disabled={!body.trim() || improveMutation.isPending}
+            title="Emilia formuliert um: Anrede & Ton (lokal) — Sie/Du kann kein US-Client"
+            aria-label="Ton ändern"
+            className="rounded border border-hairline bg-surface px-1.5 py-1.5 text-[11.5px] text-muted focus:border-tinte focus:outline-none disabled:opacity-40"
+          >
+            <option value="">Ton ändern …</option>
+            <option value="sie">Förmlich (Sie)</option>
+            <option value="du">Locker (Du)</option>
+            <option value="kuerzer">Kürzer</option>
+          </select>
+          </>
+          ) : null}
           <select
             value={followupDays}
             onChange={(e) => setFollowupDays(Number(e.target.value))}

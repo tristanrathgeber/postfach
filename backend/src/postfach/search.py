@@ -403,6 +403,23 @@ class SearchIndex:
             ).fetchall()
         return [{**self._row_to_summary(row), "thread_count": len(rows)} for row in rows]
 
+    def thread_texts(self, account: str, root: str) -> list[dict]:
+        """Faden-Inhalte für die Zusammenfassung — Bodies liegen im Index,
+        kein IMAP-Roundtrip nötig. Chronologisch, gedeckelt."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                # Neueste 30 (DESC) — der Deckel darf nicht ausgerechnet den
+                # aktuellen Stand des Fadens verwerfen; Ausgabe chronologisch.
+                "SELECT from_name, from_addr, date_iso, substr(body, 1, 1500), is_sent"
+                " FROM mails WHERE account=? AND thread_root=?"
+                " ORDER BY date_iso DESC LIMIT 30",
+                (account, root),
+            ).fetchall()
+        return [
+            {"from_name": n, "from_addr": a, "date": d, "body": b, "is_sent": bool(s)}
+            for n, a, d, b, s in reversed(rows)
+        ]
+
     def thread_roots_of(self, account: str, folder: str, uids: list[int]) -> dict[int, str]:
         """Gespeicherte Roots (inkl. Betreff-Fallback) für eine Listen-Seite."""
         if not uids:

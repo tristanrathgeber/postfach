@@ -56,13 +56,18 @@ Leitplanken (gelten für jeden Batch):
   - Vorschlag ehrlich regelbasiert (Abmelde-Header / geteilter NOREPLY_RE) — kein LLM-Call; „Ablehnen" = Nutzer-Regel: Watcher verschiebt künftige Mails nach „Aussortiert" (nie Papierkorb), ohne Notification
   - Entscheidungen in `data/screener.json`; real: 30 Kandidaten in 30 Tagen
 
-## Batch 7 — Emilia II (KI-Ausbau)
-- [ ] **Streaming-Antworten** (Text erscheint beim Generieren)
-- [ ] **Natürlichsprachige Suche** als Suchmodus (Shortwave-Learning: das meistbehaltene KI-Feature)
-- [ ] **Sie/Du- & Ton-Umschalter** beim Verbessern (deutschlandspezifisch, kein US-Client kann das)
-- [ ] **Langthread-Zusammenfassung auf Abruf** (niemals automatisch — Gemini-Backlash)
-- [ ] Besseres deutsches Embedding-Modell (nach Download-Freigabe)
-- [ ] Globaler, sichtbarer KI-Aus-Schalter (Anti-Superhuman: alles abschaltbar)
+## Batch 7 — Emilia II (KI-Ausbau) ✅ (2026-07-21, Embedding-Modell wartet auf Freigabe)
+- [x] **Streaming-Antworten** (Text erscheint beim Generieren)
+  - NDJSON über POST /emilia/chat/stream ({"sources"} → {"delta"}× → {"done"}/{"error"}); OllamaBackend.stream() im email-agent (error-Zeilen mit HTTP 200 → LLMError!); Client-Disconnect kappt den Ollama-Stream via BackgroundTask(generator.close); UI: fetch + ReadableStream, AbortController beim Schließen
+- [x] **Natürlichsprachige Suche** als Suchmodus (Shortwave-Learning: das meistbehaltene KI-Feature)
+  - ?-Präfix im Suchfeld → GET /search/nl: Emilia übersetzt in Operatoren (Prompt mit Datum + Few-Shots, Fence-/Plauder-tolerant), Ausführung über den normalen FTS-Pfad (parse_query quotet — injektionsfest); Chip „Emilia sucht: …" mit Klick-Übernahme; nur bei ready-Index (409)
+- [x] **Sie/Du- & Ton-Umschalter** beim Verbessern (deutschlandspezifisch, kein US-Client kann das)
+  - improve-Modi sie/du/kuerzer; Composer-Menü „Ton ändern …"
+- [x] **Langthread-Zusammenfassung auf Abruf** (niemals automatisch — Gemini-Backlash)
+  - POST /emilia/thread_summary; Bodies aus dem Such-Index (thread_texts, neueste 30, chronologisch); UI-Knopf in der ThreadRail ab 3 Mails
+- [ ] Besseres deutsches Embedding-Modell (nach Download-Freigabe) — Empfehlung: `jina/jina-embeddings-v2-base-de` (~160 MB); Umstieg = ollama pull + config `embed_model` + Voll-Index
+- [x] Globaler, sichtbarer KI-Aus-Schalter (Anti-Superhuman: alles abschaltbar)
+  - settings.ai_enabled: 403 auf classify/draft/emilia/*/search/nl (außer index/status — FTS + Kontakte sind keine KI); UI blendet alles KI-hafte aus; Kategorie-Cache bleibt lesbar
 
 ## Batch 8 — Kalender-Minimum & Export
 - [ ] **ICS-Einladungen inline** mit Zusagen/Ablehnen (sendet echte Antwort) — deckt ~80 % des Kalenderbedarfs ohne Kalender-App-Falle

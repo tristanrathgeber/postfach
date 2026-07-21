@@ -20,6 +20,7 @@ from imapclient.exceptions import IMAPClientError
 from pydantic import BaseModel, ValidationError
 from starlette.concurrency import run_in_threadpool
 
+from email_agent.llm.base import LLMError
 from email_agent.textutil import truncate
 
 from .config import MailAccount
@@ -78,6 +79,12 @@ class SendBody(BaseModel):
 MAX_ATTACHMENT_TOTAL = 25 * 1024 * 1024  # 25 MB
 
 
+def _require_ai(request: Request) -> None:
+    """Globaler KI-Schalter: aus heißt aus — für alle generierenden Pfade."""
+    if not request.app.state.settings.ai_enabled():
+        raise HTTPException(403, "KI ist in den Einstellungen deaktiviert")
+
+
 def _account(request: Request, name: str) -> MailAccount:
     account = request.app.state.accounts.get(name)
     if account is None:
@@ -96,7 +103,7 @@ def _mailbox_errors(fn):
     def wrapper(*args, **kwargs):
         try:
             return fn(*args, **kwargs)
-        except httpx.HTTPError as exc:
+        except (httpx.HTTPError, LLMError) as exc:
             raise HTTPException(502, f"Lokales Ollama nicht erreichbar/fehlgeschlagen: {exc}") from exc
         except (IMAPClientError, OSError) as exc:
             raise HTTPException(502, str(exc)) from exc
@@ -370,6 +377,7 @@ def categories(request: Request):
 @router.post("/classify")
 @_mailbox_errors
 def classify(request: Request, body: ClassifyBody):
+    _require_ai(request)
     acc = _account(request, body.account)
     with request.app.state.open_mailbox(acc) as box:
         mails = box.get_messages(body.folder, body.uids)
@@ -380,6 +388,7 @@ def classify(request: Request, body: ClassifyBody):
 @router.post("/draft")
 @_mailbox_errors
 def draft(request: Request, body: DraftBody):
+    _require_ai(request)
     acc = _account(request, body.account)
     with request.app.state.open_mailbox(acc) as box:
         mail = box.get_message(body.folder, body.uid)
@@ -614,7 +623,7 @@ class EmiliaChatBody(BaseModel):
 
 class EmiliaImproveBody(BaseModel):
     text: str
-    mode: Literal["korrigieren", "verbessern"]
+    mode: Literal["korrigieren", "verbessern", "sie", "du", "kuerzer"]
 
 
 class EmiliaIndexBody(BaseModel):
@@ -624,6 +633,7 @@ class EmiliaIndexBody(BaseModel):
 @router.post("/emilia/chat")
 @_mailbox_errors
 def emilia_chat(request: Request, body: EmiliaChatBody):
+    _require_ai(request)
     acc = _account(request, body.account)
     context_mail = None
     if body.uid is not None:
@@ -633,7 +643,9 @@ def emilia_chat(request: Request, body: EmiliaChatBody):
 
 
 @router.post("/emilia/improve")
+@_mailbox_errors
 def emilia_improve(request: Request, body: EmiliaImproveBody):
+    _require_ai(request)
     return {"text": request.app.state.emilia.improve(body.text, body.mode)}
 
 
@@ -653,7 +665,8 @@ def emilia_index(request: Request, body: EmiliaIndexBody):
     with request.app.state.open_mailbox(acc) as box:
         for folder in iter_index_folders(box):
             mails = box.list_messages(folder, 10000)
-            indexed += emilia.index_mails(body.account, folder, mails, owner_addr=acc.address)
+            indexed += emilia.index_mails(body.account, folder, mails, owner_addr=acc.address,
+                                          embed=request.app.state.settings.ai_enabled())
             search_index.add_mails(body.account, folder, mails)
             search_index.prune_folder(body.account, folder, [m.uid for m in mails])
             scanned.append(folder)
@@ -696,6 +709,7 @@ class SettingsBody(BaseModel):
     signatures: dict[str, str] | None = None
     notifications: dict[str, bool] | None = None
     undo_seconds: int | None = None
+    ai_enabled: bool | None = None
 
 
 class SnippetItem(BaseModel):
@@ -929,3 +943,80 @@ def screener_decide(request: Request, body: ScreenerDecideBody):
         raise HTTPException(422, "decision muss allow oder block sein")
     request.app.state.screener.decide(body.account, body.addr, body.decision)
     return {"ok": True}
+
+
+# --- Emilia II: Streaming, NL-Suche, Thread-Zusammenfassung (Contract v0.9) ---
+
+
+class ThreadSummaryBody(BaseModel):
+    account: str
+    folder: str = "INBOX"
+    uid: int
+
+
+@router.post("/emilia/chat/stream")
+@_mailbox_errors
+def emilia_chat_stream(request: Request, body: EmiliaChatBody):
+    """NDJSON: {"sources"} → {"delta"}× → {"done"} — Fehler mitten im Stream
+    kommen als {"error"}-Zeile (der HTTP-Status ist da schon raus)."""
+    from fastapi.responses import StreamingResponse
+    from starlette.background import BackgroundTask
+
+    _require_ai(request)
+    acc = _account(request, body.account)
+    context_mail = None
+    if body.uid is not None:
+        with request.app.state.open_mailbox(acc) as box:
+            context_mail = box.get_message(body.folder, body.uid)
+
+    def ndjson():
+        try:
+            for event in request.app.state.emilia.chat_stream(body.account, body.message, context_mail):
+                yield json.dumps(event, ensure_ascii=False) + "\n"
+        except Exception as exc:  # Ollama weg o. Ä. — Stream ehrlich beenden
+            log.exception("Emilia-Stream abgebrochen")
+            yield json.dumps({"error": str(exc)}, ensure_ascii=False) + "\n"
+
+    generator = ndjson()
+    # Bei Client-Disconnect läuft der BackgroundTask trotzdem: close() wirft
+    # GeneratorExit bis in den offenen httpx-Stream — Ollama hört auf zu rechnen.
+    return StreamingResponse(generator, media_type="application/x-ndjson",
+                             background=BackgroundTask(generator.close))
+
+
+@router.get("/search/nl")
+@_mailbox_errors
+def search_nl(request: Request, account: str, q: str):
+    """Natürlichsprachige Suche: Emilia übersetzt in Operatoren, gesucht wird
+    über den normalen FTS-Pfad — transparent und injektionsfest (parse_query
+    quotet alles, unbekannte Operatoren sind Volltext-Literale)."""
+    from datetime import date
+
+    _require_ai(request)
+    _account(request, account)
+    index = request.app.state.search
+    if not index.is_ready(account):
+        raise HTTPException(409, "Such-Index noch nicht aufgebaut — NL-Suche braucht den Voll-Index")
+    translated = request.app.state.emilia.translate_search(q, date.today().isoformat())
+    hits = index.search(account, translated)
+    categories = request.app.state.ai.cached_categories_many(
+        account, [(h["folder"], h["uid"]) for h in hits]
+    )
+    for h in hits:
+        h["category"] = categories.get((h["folder"], h["uid"]))
+    return {"query": translated, "hits": hits}
+
+
+@router.post("/emilia/thread_summary")
+@_mailbox_errors
+def emilia_thread_summary(request: Request, body: ThreadSummaryBody):
+    """Langthread-Zusammenfassung NUR auf Abruf — niemals automatisch."""
+    _require_ai(request)
+    _account(request, body.account)
+    index = request.app.state.search
+    root = index.thread_root_of(body.account, body.folder, body.uid)
+    texts = index.thread_texts(body.account, root) if root else []
+    if not texts:
+        raise HTTPException(404, "Kein Gesprächsfaden im Index für diese Mail")
+    summary = request.app.state.emilia.summarize_thread(texts)
+    return {"summary": summary, "mails": len(texts)}

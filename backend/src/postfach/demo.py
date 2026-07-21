@@ -43,6 +43,11 @@ def _mail(uid, subject, from_name, from_addr, body, *, seen=True, html=None, hea
 
 def _sample_inbox() -> list[ParsedMail]:
     return [
+        # Dritte Mail im Demo-Faden: ab 3 Mails zeigt die UI „Faden zusammenfassen".
+        _mail(115, "Re: Vereinsheim Schlüssel", "Martin Becker", "m.becker@web.example",
+              "Super, danke! Dann bis Samstag um 10.\nVG Martin",
+              references="<demo-114@demo.example> <demo-11@demo.example>",
+              date_iso="2026-07-19T11:15:00+02:00"),
         _mail(114, "Vereinsheim Schlüssel", "Martin Becker", "m.becker@web.example",
               "Hi Alex, hast du den Schlüssel fürs Vereinsheim? Ich komme sonst nicht rein.\nVG Martin"),
         _mail(112, "3D Print Weekly #47 — PETG-CF im Härtetest", "3D Print Weekly", "newsletter@3dprintweekly.example",
@@ -202,13 +207,47 @@ class DemoMailbox:
 class DemoEmiliaLLM:
     """Deterministische Emilia-Antworten ohne Ollama (Demo-Modus)."""
 
+    _NL_STOPWORDS = {"zeig", "zeige", "mir", "alle", "mails", "mail", "emails", "die", "der", "das", "bitte"}
+
     def complete(self, system: str, prompt: str, purpose: str) -> str:
         if purpose == "improve":
             return prompt.replace("Rechung", "Rechnung").replace("bezalen", "bezahlen")
+        if purpose == "nl_search":
+            # Regelbasiert wie die Klassifikation: deterministisch testbar.
+            words = prompt.lower().split()
+            out: list[str] = []
+            skip_next = False
+            for i, w in enumerate(words):
+                if skip_next:
+                    skip_next = False
+                    continue
+                if w == "von" and i + 1 < len(words):
+                    out.append(f"von:{words[i + 1]}")
+                    skip_next = True
+                elif w in ("mit", "und") and i + 1 < len(words) and words[i + 1].startswith("anhang"):
+                    out.append("hat:anhang")
+                    skip_next = True
+                elif w.startswith("anhang"):
+                    out.append("hat:anhang")
+                elif w not in self._NL_STOPWORDS:
+                    out.append(w.rstrip("en") if w.startswith("rechnung") else w)
+            return " ".join(out)
+        if purpose == "summary":
+            return (
+                "Martin fragt nach dem Schlüssel fürs Vereinsheim; Alex bringt ihn mit. "
+                "Offene Punkte: keine."
+            )
         return (
             "Demo-Antwort von Emilia: Im echten Betrieb beantworte ich das lokal "
             "über dein Mail-Gedächtnis (llama3.2 + all-minilm)."
         )
+
+    def stream(self, system: str, prompt: str, purpose: str):
+        """Wortweises Streaming — die Demo zeigt das echte Tipp-Gefühl."""
+        text = self.complete(system, prompt, purpose)
+        words = text.split(" ")
+        for i, word in enumerate(words):
+            yield word + (" " if i < len(words) - 1 else "")
 
 
 def demo_classify(mails: list[ParsedMail]) -> dict[int, dict]:

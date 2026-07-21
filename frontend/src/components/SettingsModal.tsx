@@ -26,6 +26,7 @@ export function SettingsModal({ accounts, onClose }: SettingsModalProps) {
         initialSignatures={settingsQuery.data.signatures}
         initialNotifications={settingsQuery.data.notifications}
         initialUndoSeconds={settingsQuery.data.undo_seconds}
+        initialAiEnabled={settingsQuery.data.ai_enabled}
         initialSnippets={snippetsQuery.data}
         onClose={onClose}
       />
@@ -74,6 +75,7 @@ function SettingsForm({
   initialSignatures,
   initialNotifications,
   initialUndoSeconds,
+  initialAiEnabled,
   initialSnippets,
   onClose,
 }: {
@@ -81,6 +83,7 @@ function SettingsForm({
   initialSignatures: Record<string, string>
   initialNotifications: Record<string, boolean>
   initialUndoSeconds: number
+  initialAiEnabled: boolean
   initialSnippets: Snippet[]
   onClose: () => void
 }) {
@@ -89,6 +92,7 @@ function SettingsForm({
   const [signatures, setSignatures] = useState<Record<string, string>>(initialSignatures)
   const [notifications, setNotifications] = useState<Record<string, boolean>>(initialNotifications)
   const [undoSeconds, setUndoSeconds] = useState<number>(initialUndoSeconds)
+  const [aiEnabled, setAiEnabled] = useState<boolean>(initialAiEnabled)
   const [snippets, setSnippets] = useState<Snippet[]>(initialSnippets)
 
   const cleanedSnippets = snippets
@@ -98,13 +102,14 @@ function SettingsForm({
   const settingsDirty =
     JSON.stringify(signatures) !== JSON.stringify(initialSignatures) ||
     JSON.stringify(notifications) !== JSON.stringify(initialNotifications) ||
-    undoSeconds !== initialUndoSeconds
+    undoSeconds !== initialUndoSeconds ||
+    aiEnabled !== initialAiEnabled
   const snippetsDirty = JSON.stringify(cleanedSnippets) !== JSON.stringify(initialSnippets)
 
   const saveMutation = useMutation({
     mutationFn: () =>
       Promise.all([
-        settingsDirty ? api.putSettings({ signatures, notifications, undo_seconds: undoSeconds }) : Promise.resolve({ ok: true as const }),
+        settingsDirty ? api.putSettings({ signatures, notifications, undo_seconds: undoSeconds, ai_enabled: aiEnabled }) : Promise.resolve({ ok: true as const }),
         snippetsDirty ? api.putSnippets(cleanedSnippets) : Promise.resolve({ ok: true as const }),
       ]),
     onSuccess: () => {
@@ -221,6 +226,24 @@ function SettingsForm({
               <option value={20}>20 Sekunden</option>
               <option value={30}>30 Sekunden</option>
             </select>
+          </label>
+        </section>
+
+        {/* Emilia & KI — der globale Schalter: aus heißt aus (Anti-Superhuman) */}
+        <section>
+          <h3 className="font-mono text-[9.5px] uppercase tracking-[0.1em] text-muted">Emilia &amp; KI</h3>
+          <p className="mt-0.5 text-[11.5px] text-muted">
+            Ein Schalter für alles: Sortieren, Entwürfe, Chat, Umformulieren, KI-Suche. Alles läuft
+            lokal — und aus heißt wirklich aus. Bereits vergebene Kategorien bleiben sichtbar.
+          </p>
+          <label className="mt-2 flex items-center gap-2 text-[13px]">
+            <input
+              type="checkbox"
+              checked={aiEnabled}
+              onChange={(e) => setAiEnabled(e.target.checked)}
+              className="h-3.5 w-3.5 accent-tinte"
+            />
+            KI aktiviert
           </label>
         </section>
 

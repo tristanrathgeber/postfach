@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { api, errText } from '../lib/api'
 import type { Detail, MsgRef, ThreadMail } from '../lib/types'
 import { formatFullDate, formatListDate, formatSize } from '../lib/format'
@@ -8,7 +8,7 @@ import { folderLeaf, isSpamFolder } from '../lib/folders'
 import { Chip } from './Chip'
 import { EmptyState } from './EmptyState'
 import { HtmlMailFrame } from './HtmlMailFrame'
-import { AlertIcon, ArchiveIcon, ClockIcon, DownloadIcon, ForwardIcon, MailIcon, MailOpenIcon, PaperclipIcon, ReplyIcon, TrashIcon } from './Icons'
+import { AlertIcon, ArchiveIcon, ClockIcon, DownloadIcon, ForwardIcon, MailIcon, MailOpenIcon, PaperclipIcon, ReplyIcon, SparklesIcon, SpinnerIcon, TrashIcon } from './Icons'
 
 type ReaderProps = {
   opened: MsgRef | null
@@ -28,6 +28,8 @@ type ReaderProps = {
   onChangeCategory: (detail: Detail, category: string) => void
   /** Klick auf eine Faden-Mail: im Reader öffnen. */
   onOpenThreadMail: (mail: ThreadMail) => void
+  /** Globaler KI-Schalter — aus blendet „Zusammenfassen" aus. */
+  aiEnabled?: boolean
   /** Faden-Triage (Gesendet-Kopien sind bereits herausgefiltert). */
   onThreadAction: (mails: ThreadMail[], action: 'archive' | 'trash') => void
 }
@@ -68,16 +70,27 @@ function AddressLine({ label, value }: { label: string; value: string }) {
 function ThreadRail({
   thread,
   current,
+  aiEnabled,
   onOpen,
   onAction,
 }: {
   thread: ThreadMail[]
   current: MsgRef
+  aiEnabled: boolean
   onOpen: (mail: ThreadMail) => void
   onAction: (mails: ThreadMail[], action: 'archive' | 'trash') => void
 }) {
   // Gesendet-Kopien räumt man nicht weg — das Wissen liefert der Server.
   const triagable = thread.filter((m) => !m.is_sent)
+  // Zusammenfassung NUR auf Klick (nie automatisch) — pro geöffneter Mail zurückgesetzt.
+  const [summary, setSummary] = useState<string | null>(null)
+  const currentKey = `${current.account}:${current.folder}:${current.uid}`
+  useEffect(() => setSummary(null), [currentKey])
+  const summaryMutation = useMutation({
+    mutationFn: () => api.threadSummary({ account: current.account, folder: current.folder, uid: current.uid }),
+    onSuccess: (result) => setSummary(result.summary),
+    onError: (e) => setSummary(`Zusammenfassung fehlgeschlagen: ${errText(e)}`),
+  })
   return (
     <section className="mt-4 rounded border border-hairline bg-surface" aria-label="Konversation">
       <header className="flex items-center gap-2 border-b border-hairline px-3 py-1.5">
@@ -85,6 +98,18 @@ function ThreadRail({
           Konversation ({thread.length})
         </span>
         <span className="flex-1" />
+        {aiEnabled && thread.length >= 3 && summary === null ? (
+          <button
+            type="button"
+            onClick={() => summaryMutation.mutate()}
+            disabled={summaryMutation.isPending}
+            title="Emilia fasst den Faden zusammen (lokal, nur auf Klick)"
+            className="flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[10.5px] text-muted transition hover:bg-[#F1EFEA] hover:text-tinte disabled:opacity-50"
+          >
+            {summaryMutation.isPending ? <SpinnerIcon size={10} /> : <SparklesIcon size={10} />}
+            Zusammenfassen
+          </button>
+        ) : null}
         {triagable.length > 0 ? (
           <>
             <button
@@ -106,6 +131,19 @@ function ThreadRail({
           </>
         ) : null}
       </header>
+      {summary !== null ? (
+        <div className="flex items-start gap-2 border-b border-hairline bg-paper px-3 py-2">
+          <p className="min-w-0 flex-1 whitespace-pre-wrap text-[12px] leading-relaxed text-ink">{summary}</p>
+          <button
+            type="button"
+            onClick={() => setSummary(null)}
+            aria-label="Zusammenfassung schließen"
+            className="shrink-0 rounded p-0.5 font-mono text-[10px] text-muted transition hover:text-ink"
+          >
+            ×
+          </button>
+        </div>
+      ) : null}
       <ol>
         {thread.map((m) => {
           const isCurrent = m.account === current.account && m.folder === current.folder && m.uid === current.uid
@@ -138,7 +176,7 @@ function ThreadRail({
   )
 }
 
-export function Reader({ opened, imagesEnabled, onEnableImages, onReply, onForward, onArchive, onTrash, onToggleSeen, onToggleSpam, onSnooze, categories, onChangeCategory, onOpenThreadMail, onThreadAction }: ReaderProps) {
+export function Reader({ opened, imagesEnabled, onEnableImages, onReply, onForward, onArchive, onTrash, onToggleSeen, onToggleSpam, onSnooze, categories, onChangeCategory, onOpenThreadMail, aiEnabled = true, onThreadAction }: ReaderProps) {
   const [snoozeOpen, setSnoozeOpen] = useState(false)
   useEffect(() => setSnoozeOpen(false), [opened])
   const detailQuery = useQuery({
@@ -272,6 +310,7 @@ export function Reader({ opened, imagesEnabled, onEnableImages, onReply, onForwa
             <ThreadRail
               thread={threadQuery.data!}
               current={opened}
+              aiEnabled={aiEnabled}
               onOpen={onOpenThreadMail}
               onAction={onThreadAction}
             />

@@ -43,33 +43,61 @@ export function EmiliaPanel({
     onError: (e) => showToast(`Gedächtnis fehlgeschlagen: ${errText(e)}`, 'error'),
   })
 
-  const chatMutation = useMutation({
-    mutationFn: (message: string) =>
-      api.emiliaChat({
-        account: account!,
-        message,
-        ...(context && !contextDismissed ? { folder: context.folder, uid: context.uid } : {}),
-      }),
-    onSuccess: ({ reply, sources }) => {
-      setMessages((prev) => [...prev, { role: 'emilia', text: reply, sources }])
-    },
-    onError: (e) => {
-      setMessages((prev) => [...prev, { role: 'emilia', text: `Da ist etwas schiefgegangen: ${errText(e)}` }])
-    },
-  })
+  // Streaming: die Antwort wächst Wort für Wort in der letzten Emilia-Blase.
+  const [streaming, setStreaming] = useState(false)
+  // Panel zu → Stream kappen, die lokale LLM soll nicht ins Leere rechnen.
+  const abortRef = useRef<AbortController | null>(null)
+  useEffect(() => () => abortRef.current?.abort(), [])
 
-  const send = useCallback(() => {
+  const patchLast = useCallback((patch: (m: ChatMessage) => ChatMessage) => {
+    setMessages((prev) => {
+      const next = [...prev]
+      next[next.length - 1] = patch(next[next.length - 1])
+      return next
+    })
+  }, [])
+
+  const send = useCallback(async () => {
     const message = input.trim()
-    if (!message || !account || chatMutation.isPending) return
-    setMessages((prev) => [...prev, { role: 'user', text: message }])
+    if (!message || !account || streaming) return
+    setMessages((prev) => [...prev, { role: 'user', text: message }, { role: 'emilia', text: '' }])
     setInput('')
-    chatMutation.mutate(message)
-  }, [input, account, chatMutation])
+    setStreaming(true)
+    abortRef.current = new AbortController()
+    try {
+      await api.emiliaChatStream(
+        {
+          account,
+          message,
+          ...(context && !contextDismissed ? { folder: context.folder, uid: context.uid } : {}),
+        },
+        (event) => {
+          if (event.sources) patchLast((m) => ({ ...m, sources: event.sources }))
+          if (event.delta) patchLast((m) => ({ ...m, text: m.text + event.delta }))
+          if (event.error)
+            patchLast((m) => ({
+              ...m,
+              // Teilantwort + Fehler: beides zeigen — eine abgebrochene Antwort
+              // darf nie wie eine vollständige aussehen.
+              text: m.text ? `${m.text}\n\n⚠️ Abgebrochen: ${event.error}` : `Da ist etwas schiefgegangen: ${event.error}`,
+            }))
+        },
+        abortRef.current.signal,
+      )
+    } catch (e) {
+      patchLast((m) => ({
+        ...m,
+        text: m.text ? `${m.text}\n\n⚠️ Abgebrochen: ${errText(e)}` : `Da ist etwas schiefgegangen: ${errText(e)}`,
+      }))
+    } finally {
+      setStreaming(false)
+    }
+  }, [input, account, streaming, context, contextDismissed, patchLast])
 
-  // Ans Ende scrollen, wenn neue Nachrichten kommen
+  // Ans Ende scrollen, wenn Nachrichten dazukommen ODER die Antwort wächst
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight })
-  }, [messages.length, chatMutation.isPending])
+  }, [messages, streaming])
 
   return (
     <aside className="flex h-full w-[340px] shrink-0 flex-col border-l border-hairline bg-paper">
@@ -150,7 +178,7 @@ export function EmiliaPanel({
                 </div>
               ),
             )}
-            {chatMutation.isPending ? (
+            {streaming && messages[messages.length - 1]?.text === '' ? (
               <p className="border-l-2 border-hairline pl-3 font-mono text-[11px] text-muted">Emilia denkt …</p>
             ) : null}
           </div>
@@ -175,11 +203,13 @@ export function EmiliaPanel({
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
+            // Kein pauschales stopPropagation: ⌘J/⌘K müssen auch mit Fokus im
+            // Feld funktionieren; Einzeltasten schützt isEditableTarget global.
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault()
+              e.stopPropagation()
               send()
             }
-            e.stopPropagation()
           }}
           rows={Math.min(4, Math.max(1, input.split('\n').length))}
           placeholder={account ? 'Emilia fragen … (Enter sendet)' : 'Kein Konto verfügbar'}

@@ -58,6 +58,7 @@ class SettingsStore(_JsonFile):
         data.setdefault("signatures", {})
         data.setdefault("notifications", {})
         data.setdefault("undo_seconds", 15)
+        data.setdefault("ai_enabled", True)
         return data
 
     def put(self, data: dict) -> None:
@@ -72,10 +73,16 @@ class SettingsStore(_JsonFile):
                 current["notifications"] = {str(k): bool(v) for k, v in data["notifications"].items()}
             if data.get("undo_seconds") is not None:
                 current["undo_seconds"] = max(0, min(int(data["undo_seconds"]), 60))
+            if data.get("ai_enabled") is not None:
+                current["ai_enabled"] = bool(data["ai_enabled"])
             self._write(current)
 
     def notifications_enabled(self, account: str) -> bool:
         return bool(self.get()["notifications"].get(account, True))
+
+    def ai_enabled(self) -> bool:
+        """Globaler KI-Schalter (Anti-Superhuman: alles abschaltbar)."""
+        return bool(self.get()["ai_enabled"])
 
 
 class DraftStore(_JsonFile):

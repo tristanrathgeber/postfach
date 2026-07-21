@@ -180,3 +180,20 @@ Screener: „block" ist eine NUTZER-Regel — der Live-Watcher verschiebt künft
 Mails des Absenders in den Ordner „Aussortiert" (nie Papierkorb, nie löschen)
 und unterdrückt deren Benachrichtigung. Erstkontakt = erste Mail < 30 Tage,
 Adresse nie Empfänger einer Gesendet-Mail, keine Entscheidung vorhanden.
+
+## Nachtrag v0.9 — Batch 7 „Emilia II" (eingefroren 2026-07-21)
+
+| Methode & Pfad | Request | Response |
+|---|---|---|
+| `POST /api/emilia/chat/stream` | wie `/api/emilia/chat` | NDJSON-Stream: `{"sources":[…]}` → `{"delta":"…"}`× → `{"done":true}` bzw. `{"error":"…"}` |
+| `GET /api/search/nl?account=&q=` | — | `{"query":"<Operator-Query>","hits":[Summary…]}`; 409 wenn Index nicht ready |
+| `POST /api/emilia/improve` | `{"text","mode"}` — mode neu auch `"sie"\|"du"\|"kuerzer"` | `{"text"}` |
+| `POST /api/emilia/thread_summary` | `{"account","folder","uid"}` | `{"summary":"…","mails":n}`; 404 ohne Faden |
+| `PUT /api/settings` | neu: `"ai_enabled": bool` (Teil-Update) | `{"ok":true}` |
+
+`ai_enabled=false` ⇒ 403 auf `/api/classify`, `/api/draft`, `/api/search/nl`
+und alle `/api/emilia/*`-Routen AUSSER `/emilia/index` (läuft weiter, überspringt
+nur die Embeddings — FTS-Suche und Kontakt-Ernte sind keine KI) und
+`/emilia/status` (Anzeige). Kategorie-Cache bleibt lesbar. Nach Reaktivierung
+holt der nächste Voll-Index übersprungene Embeddings nach.
+Streaming-Transport: `application/x-ndjson`, eine JSON-Zeile pro Ereignis.

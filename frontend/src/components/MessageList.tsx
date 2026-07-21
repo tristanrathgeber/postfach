@@ -16,6 +16,12 @@ type MessageListProps = {
   /** false: der Volltext-Index fehlt noch — es wurde nur der Ordner durchsucht. */
   searchIndexReady: boolean
   activeQuery: string
+  /** Von Emilia übersetzte Operator-Query (NL-Suche mit ?-Präfix) — Klick übernimmt sie. */
+  nlQuery?: string | null
+  /** Klartext-Fehler der Suche (z. B. „KI ist deaktiviert") statt „nicht erreichbar". */
+  failureDetail?: string | null
+  /** KI aus → kein ?-Hinweis im Placeholder. */
+  aiEnabled?: boolean
   searchInputRef: RefObject<HTMLInputElement>
   onSearchSubmit: (q: string) => void
   onClearSearch: () => void
@@ -72,6 +78,9 @@ export function MessageList({
   searchActive,
   searchIndexReady,
   activeQuery,
+  nlQuery = null,
+  failureDetail = null,
+  aiEnabled = true,
   searchInputRef,
   onSearchSubmit,
   onClearSearch,
@@ -131,7 +140,7 @@ export function MessageList({
                 else setDraft('')
               }
             }}
-            placeholder="Suchen …  von: betreff: hat:anhang  ( / )"
+            placeholder={aiEnabled ? 'Suchen …  von: betreff: hat:anhang  ·  ? fragt Emilia  ( / )' : 'Suchen …  von: betreff: hat:anhang  ( / )'}
             aria-label="Suchen"
             className="w-full rounded border border-hairline bg-paper py-1.5 pl-8 pr-3 text-[13px] placeholder:font-mono placeholder:text-[11px] placeholder:text-muted focus:border-tinte focus:outline-none"
           />
@@ -146,6 +155,16 @@ export function MessageList({
               ? `Suche: „${activeQuery}“ · ganzes Konto · von: an: betreff: vor: nach: hat:anhang`
               : `Suche: „${activeQuery}“ · nur dieser Ordner — der Volltext-Index entsteht beim nächsten Index-Lauf`}
           </span>
+          {nlQuery ? (
+            <button
+              type="button"
+              onClick={() => onSearchSubmit(nlQuery)}
+              title="Übersetzte Suche übernehmen und verfeinern"
+              className="max-w-[200px] shrink-0 truncate rounded border border-hairline bg-surface px-1.5 py-0.5 font-mono text-[10px] text-tinte transition hover:border-tinte"
+            >
+              Emilia sucht: {nlQuery}
+            </button>
+          ) : null}
           <span className="flex-1" />
           <button
             type="button"
@@ -185,7 +204,7 @@ export function MessageList({
       {/* Konto-Fehler (z. B. 502 — Konto nicht erreichbar); übrige Konten laufen weiter */}
       {failures.map((account) => (
         <div key={account} className="border-b border-red-300 bg-red-50 px-4 py-1.5 text-[12px] text-red-700">
-          Konto {account} nicht erreichbar
+          {failureDetail ? `${account}: ${failureDetail}` : `Konto ${account} nicht erreichbar`}
         </div>
       ))}
 

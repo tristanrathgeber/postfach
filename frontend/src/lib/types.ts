@@ -153,7 +153,7 @@ export type EmiliaChatRequest = {
 
 export type EmiliaChatResponse = { reply: string; sources: EmiliaSource[] }
 
-export type EmiliaImproveMode = 'korrigieren' | 'verbessern'
+export type EmiliaImproveMode = 'korrigieren' | 'verbessern' | 'sie' | 'du' | 'kuerzer'
 
 // --- Batch 1 „Schreiben komplett" (Nachtrag v0.3, eingefroren 2026-07-21) ---
 
@@ -164,7 +164,25 @@ export type Settings = {
   notifications: Record<string, boolean>
   /** Undo-Fenster in Sekunden (0 = sofort senden). */
   undo_seconds: number
+  /** Globaler KI-Schalter — aus heißt aus (Classify/Draft/Emilia/NL-Suche). */
+  ai_enabled: boolean
 }
+
+// --- Emilia II (Nachtrag v0.9) ---
+
+/** NDJSON-Ereignis aus POST /api/emilia/chat/stream. */
+export type EmiliaStreamEvent = {
+  sources?: EmiliaSource[]
+  delta?: string
+  done?: true
+  error?: string
+}
+
+/** GET /api/search/nl — übersetzte Query + normale Suchtreffer. */
+export type NlSearchResult = { query: string; hits: Summary[] }
+
+/** POST /api/emilia/thread_summary */
+export type ThreadSummary = { summary: string; mails: number }
 
 /** GET .../thread — Faden-Mail: Summary + Server-Wissen über Gesendet-Kopien. */
 export type ThreadMail = Summary & { is_sent: boolean }
