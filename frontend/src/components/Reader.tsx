@@ -11,7 +11,9 @@ import { HtmlMailFrame } from './HtmlMailFrame'
 import { InviteCard } from './InviteCard'
 import { EntityChips } from './EntityChips'
 import { useToast } from './Toast'
-import { AlertIcon, ArchiveIcon, BookIcon, ClockIcon, DownloadIcon, ForwardIcon, MailIcon, MailOpenIcon, PaperclipIcon, ReplyIcon, SparklesIcon, SpinnerIcon, TrashIcon } from './Icons'
+import { AlertIcon, ArchiveIcon, BookIcon, ClockIcon, DownloadIcon, EyeIcon, ForwardIcon, MailIcon, MailOpenIcon, PaperclipIcon, ReplyIcon, SparklesIcon, SpinnerIcon, TrashIcon } from './Icons'
+import { AttachmentPreview } from './AttachmentPreview'
+import { canPreview } from '../lib/attachmentKind'
 import type { InviteResponse } from '../lib/types'
 import { recordMouseAction } from '../lib/shortcutTeach'
 import { simplifyBody, wasTruncated } from '../lib/readerText'
@@ -198,6 +200,9 @@ export function Reader({ opened, keysEnabled = true, imagesEnabled, onEnableImag
   // Reader-View (aufgeräumte Klartext-Ansicht) — pro geöffneter Mail zurückgesetzt.
   const [readerView, setReaderView] = useState(false)
   useEffect(() => setReaderView(false), [opened])
+  // Anhang-Vorschau (Overlay): Startposition in detail.attachments, null = zu.
+  const [previewAt, setPreviewAt] = useState<number | null>(null)
+  useEffect(() => setPreviewAt(null), [opened])
   // Taste „v" schaltet um (nur bei offener Mail, kein Overlay offen, nicht in
   // Eingabefeldern) — konsistent zu den globalen Shortcuts in App.
   useEffect(() => {
@@ -453,25 +458,37 @@ export function Reader({ opened, keysEnabled = true, imagesEnabled, onEnableImag
             </div>
           )}
 
-          {/* Anhänge */}
+          {/* Anhänge — Klick öffnet die schließbare Vorschau (mit Download darin). */}
           {detail.attachments.length > 0 ? (
             <div className="mt-4 flex flex-wrap gap-2">
-              {detail.attachments.map((a) => (
-                <a
+              {detail.attachments.map((a, i) => (
+                <button
                   key={a.index}
-                  href={api.attachmentUrl(detail.account, detail.uid, a.index, detail.folder)}
-                  download={a.filename}
+                  type="button"
+                  onClick={() => setPreviewAt(i)}
+                  title={canPreview(a.content_type) ? 'Vorschau öffnen' : 'Öffnen (Download)'}
                   className="flex items-center gap-1.5 rounded border border-hairline bg-surface px-2.5 py-1.5 text-[12px] transition hover:border-tinte hover:text-tinte"
                 >
-                  <DownloadIcon size={13} />
+                  {canPreview(a.content_type) ? <EyeIcon size={13} /> : <PaperclipIcon size={13} />}
                   <span className="max-w-[220px] truncate">{a.filename}</span>
                   <span className="font-mono text-[10px] text-muted">{formatSize(a.size)}</span>
-                </a>
+                </button>
               ))}
             </div>
           ) : null}
         </article>
       </div>
+
+      {previewAt !== null && detail.attachments[previewAt] ? (
+        <AttachmentPreview
+          account={detail.account}
+          uid={detail.uid}
+          folder={detail.folder}
+          attachments={detail.attachments}
+          startIndex={previewAt}
+          onClose={() => setPreviewAt(null)}
+        />
+      ) : null}
     </section>
   )
 }

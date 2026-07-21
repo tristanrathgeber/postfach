@@ -6,13 +6,20 @@ Schnittstelle wie Mailbox (Duck-Typing), gleiche Vertragsgarantien.
 
 from __future__ import annotations
 
+import base64
 import email
 from dataclasses import replace
 from email.policy import default as default_policy
 
 from .mail_imap import AttachmentFile, AttachmentMeta, ParsedMail
 
-_PDF = b"%PDF-1.4\n% Demo-Rechnung Postfach\n%%EOF\n"
+# Echte, ansehbare Demo-Anhänge (gültige einseitige PDF-Rechnung + kleines PNG),
+# damit die Vorschau etwas zeigt. Base64 in _demo_assets (maschinell erzeugt,
+# nicht von Hand editieren).
+from ._demo_assets import PDF_B64, PNG_B64
+
+_PDF = base64.b64decode(PDF_B64)
+_PNG = base64.b64decode(PNG_B64)
 
 _NEWSLETTER_HTML = (
     '<h1>3D Print Weekly</h1><img src="https://cdn.example/banner.png" alt="Banner">'
@@ -83,7 +90,8 @@ def _sample_inbox() -> list[ParsedMail]:
               "Hi Alex, kannst du am Samstag die Trainingsgruppe übernehmen? Ich bin im Urlaub. VG Martin", seen=False),
         _mail(109, "Ihre Telekom Rechnung Juli 2026", "Telekom", "rechnung@telekom.example",
               "Ihre Rechnung über 39,95 € finden Sie im Anhang.",
-              attachments=[AttachmentMeta(0, "Rechnung Juli 39,95€.pdf", "application/pdf", len(_PDF))]),
+              attachments=[AttachmentMeta(0, "Rechnung Juli 39,95€.pdf", "application/pdf", len(_PDF)),
+                           AttachmentMeta(1, "Zählerstand.png", "image/png", len(_PNG))]),
         _mail(108, "Deine Bestellung wurde versandt", "Amazon", "versand@amazon.example",
               "Dein Paket mit PETG-Filament (2 kg) ist unterwegs. Zustellung: Montag."),
         _mail(107, "[makrhub] PR #142: fix pricing rounding", "GitHub", "notifications@github.example",
@@ -150,7 +158,11 @@ class DemoMailbox:
     def get_attachment_files(self, folder: str, uid: int) -> list[AttachmentFile]:
         mail = self.get_message(folder, uid)
         return [
-            AttachmentFile(filename=meta.filename, content_type=meta.content_type, payload=_PDF)
+            AttachmentFile(
+                filename=meta.filename,
+                content_type=meta.content_type,
+                payload=_PNG if meta.content_type.startswith("image/") else _PDF,
+            )
             for meta in (mail.attachments if mail else ())
         ]
 

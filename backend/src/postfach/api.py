@@ -23,6 +23,7 @@ from starlette.concurrency import run_in_threadpool
 from email_agent.llm.base import LLMError
 from email_agent.textutil import truncate
 
+from . import attach
 from .config import MailAccount
 from .extract import extract_entities
 from .mail_imap import ParsedMail
@@ -255,26 +256,58 @@ def _invite_dict(mail) -> dict | None:
 
 @router.get("/messages/{account}/{uid}/attachments/{index}")
 @_mailbox_errors
-def attachment(request: Request, account: str, uid: int, index: int, folder: str = "INBOX"):
+def attachment(request: Request, account: str, uid: int, index: int, folder: str = "INBOX", inline: int = 0):
+    """Anhang ausliefern. Mit ?inline=1 für die Vorschau — aber NUR ungefährliche
+    Typen dürfen inline; HTML/SVG/XML gehen als octet-stream-Download raus, damit
+    sie nie als Dokument auf dem App-Origin Skripte ausführen können."""
     acc = _account(request, account)
     with request.app.state.open_mailbox(acc) as box:
         file = box.get_attachment(folder, uid, index)
     if file is None:
         raise HTTPException(404, "Anhang nicht gefunden")
+    safe = attach.inline_safe(file.content_type)
+    disposition = "inline" if (inline and safe) else "attachment"
+    media_type = file.content_type if safe else "application/octet-stream"
     return Response(
         content=file.payload,
-        media_type=file.content_type,
-        headers={"Content-Disposition": _content_disposition(file.filename)},
+        media_type=media_type,
+        headers={
+            "Content-Disposition": _content_disposition(file.filename, disposition),
+            "X-Content-Type-Options": "nosniff",  # kein MIME-Sniffing
+        },
     )
 
 
-def _content_disposition(filename: str) -> str:
+def _downloads_dir() -> "Path":
+    from pathlib import Path
+
+    return Path.home() / "Downloads"
+
+
+@router.post("/messages/{account}/{uid}/attachments/{index}/save")
+@_mailbox_errors
+def save_attachment(request: Request, account: str, uid: int, index: int, folder: str = "INBOX"):
+    """Anhang zuverlässig in ~/Downloads ablegen — funktioniert auch im
+    WKWebView-Fenster, wo ein <a download> die App wegnavigieren würde."""
+    acc = _account(request, account)
+    with request.app.state.open_mailbox(acc) as box:
+        file = box.get_attachment(folder, uid, index)
+    if file is None:
+        raise HTTPException(404, "Anhang nicht gefunden")
+    try:
+        saved = attach.save_bytes_to_dir(_downloads_dir(), file.filename, file.payload)
+    except OSError as exc:
+        raise HTTPException(500, f"Konnte nicht speichern: {exc}")
+    return {"path": str(saved), "filename": saved.name}
+
+
+def _content_disposition(filename: str, disposition: str = "attachment") -> str:
     """RFC-5987: Header-Werte sind latin-1 — Unicode-Namen (€, Umlaute) gehen
     über filename*, der ASCII-Fallback ist zusätzlich escaped (kein CRLF/Quote)."""
     from urllib.parse import quote
 
     fallback = re.sub(r"[^A-Za-z0-9. _-]", "_", filename) or "anhang"
-    return f"attachment; filename=\"{fallback}\"; filename*=UTF-8''{quote(filename, safe='')}"
+    return f"{disposition}; filename=\"{fallback}\"; filename*=UTF-8''{quote(filename, safe='')}"
 
 
 @router.post("/messages/{account}/{uid}/action")

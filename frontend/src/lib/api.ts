@@ -122,9 +122,14 @@ export const api = {
   message: (account: string, uid: number, folder = 'INBOX'): Promise<Detail> =>
     request(`/messages/${enc(account)}/${uid}?folder=${enc(folder)}`),
 
-  /** GET /api/messages/{account}/{uid}/attachments/{index}?folder=INBOX — Binärstream (nur URL, kein fetch) */
-  attachmentUrl: (account: string, uid: number, index: number, folder = 'INBOX'): string =>
-    `${BASE}/messages/${enc(account)}/${uid}/attachments/${index}?folder=${enc(folder)}`,
+  /** GET /api/messages/{account}/{uid}/attachments/{index}?folder=INBOX — Binärstream (nur URL, kein fetch).
+   * inline=true bittet um Inline-Auslieferung für die Vorschau (Server erlaubt das nur für sichere Typen). */
+  attachmentUrl: (account: string, uid: number, index: number, folder = 'INBOX', inline = false): string =>
+    `${BASE}/messages/${enc(account)}/${uid}/attachments/${index}?folder=${enc(folder)}${inline ? '&inline=1' : ''}`,
+
+  /** POST …/attachments/{index}/save — legt den Anhang in ~/Downloads ab (zuverlässig auch im App-Fenster). */
+  saveAttachment: (account: string, uid: number, index: number, folder = 'INBOX'): Promise<{ path: string; filename: string }> =>
+    post(`/messages/${enc(account)}/${uid}/attachments/${index}/save?folder=${enc(folder)}`, {}),
 
   /** POST /api/messages/{account}/{uid}/action */
   action: (account: string, uid: number, body: MessageAction): Promise<{ ok: true }> =>

@@ -219,8 +219,21 @@ class Mailbox:
         ]
 
     def get_attachment(self, folder: str, uid: int, index: int) -> AttachmentFile | None:
-        files = self.get_attachment_files(folder, uid)
-        return files[index] if index < len(files) else None
+        # Nur den angeforderten Anhang dekodieren — get_attachment_files würde ALLE
+        # Payloads dekodieren (base64/QP), um genau einen zurückzugeben.
+        raw = self._raw_for(folder, uid)
+        if raw is None:
+            return None
+        msg = email.message_from_bytes(raw, policy=default_policy)
+        _t, _h, attachment_parts, _cal = _walk_parts(msg)
+        if not 0 <= index < len(attachment_parts):
+            return None
+        part = attachment_parts[index]
+        return AttachmentFile(
+            filename=str(part.get_filename() or f"anhang-{index}"),
+            content_type=part.get_content_type(),
+            payload=part.get_payload(decode=True) or b"",
+        )
 
     def search(self, folder: str, query: str) -> list[ParsedMail]:
         from imapclient.exceptions import IMAPClientError

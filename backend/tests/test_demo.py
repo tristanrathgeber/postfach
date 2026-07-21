@@ -57,7 +57,10 @@ def test_demo_classifier_is_deterministic_and_covers_categories():
 
 def test_demo_get_attachment_files_bulk():
     # Pendant zur Mailbox-Bulk-API: ein Fetch liefert alle Anhänge (Send-Pfad).
+    # Die Telekom-Demo hat eine PDF UND ein PNG (für die Vorschau) — jeweils mit
+    # den passenden Bytes.
     box = DemoMailbox()
     files = box.get_attachment_files("INBOX", 109)
-    assert [f.filename for f in files] == ["Rechnung Juli 39,95€.pdf"]
-    assert files[0].payload
+    assert [f.filename for f in files] == ["Rechnung Juli 39,95€.pdf", "Zählerstand.png"]
+    assert files[0].payload[:4] == b"%PDF"
+    assert files[1].payload[:8] == b"\x89PNG\r\n\x1a\n"

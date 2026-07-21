@@ -32,6 +32,10 @@ export function PaperclipIcon(p: IconProps) {
   )
 }
 
+export function EyeIcon(p: IconProps) {
+  return <Svg {...p} paths={['M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z', 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6']} />
+}
+
 export function ArchiveIcon(p: IconProps) {
   return <Svg {...p} paths={['M21 8v13H3V8', 'M1 3h22v5H1z', 'M10 12h4']} />
 }
