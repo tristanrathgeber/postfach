@@ -147,7 +147,7 @@ function Postfach() {
   const screenerAgg = useScreenerAggregate(accountNames)
   const snippetsQuery = useSnippets()
   const settingsQuery = useSettings()
-  const { theme, setTheme, density, setDensity } = usePreferences()
+  const { theme, setTheme, density, setDensity, palette, setPalette, accent, setAccent } = usePreferences()
   // Effektiv dunkel? system kann per OS-Einstellung dunkel auflösen.
   const effectiveDark =
     theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
@@ -918,6 +918,10 @@ function Postfach() {
           onThemeChange={setTheme}
           density={density}
           onDensityChange={setDensity}
+          palette={palette}
+          onPaletteChange={setPalette}
+          accent={accent}
+          onAccentChange={setAccent}
           onClose={() => setSettingsOpen(false)}
         />
       ) : null}

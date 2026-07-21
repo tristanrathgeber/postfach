@@ -6,10 +6,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Postfach</title>
     <script>
-      // Theme vor dem ersten Paint setzen (kein Flash). system = kein Attribut.
+      // Theme, Palette und Akzent vor dem ersten Paint setzen (kein Flash).
+      // system = kein data-theme, schreibtisch = kein data-palette.
       try {
+        var root = document.documentElement
         var t = localStorage.getItem('postfach.theme')
-        if (t === 'light' || t === 'dark') document.documentElement.setAttribute('data-theme', t)
+        if (t === 'light' || t === 'dark') root.setAttribute('data-theme', t)
+        var p = localStorage.getItem('postfach.palette')
+        if (p && p !== 'schreibtisch' && /^[a-z]+$/.test(p)) root.setAttribute('data-palette', p)
+        var a = localStorage.getItem('postfach.accent')
+        if (a && /^#[0-9a-fA-F]{6}$/.test(a)) {
+          var d = parseInt(a.slice(1), 16)
+          var s = '#' + (((((d >> 16) & 255) * 84 / 100) << 16 |
+            (((d >> 8) & 255) * 84 / 100) << 8 | ((d & 255) * 84 / 100)) >>> 0).toString(16).padStart(6, '0')
+          root.style.setProperty('--tinte', a); root.style.setProperty('--btn', a)
+          root.style.setProperty('--tinte-strong', s); root.style.setProperty('--btn-strong', s)
+        }
       } catch (e) {}
     </script>
   </head>

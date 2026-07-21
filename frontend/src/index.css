@@ -2,8 +2,13 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Farbthemen ────────────────────────────────────────────────────────────
+   Chrome-Tokens (Papier/Tinte/Haarlinien …) kommen pro Palette; die
+   abgeleiteten Tokens (hover, tint, *-bg) rechnet :root EINMAL per color-mix
+   und folgt so jeder Palette automatisch. Default „Schreibtisch" = :root ohne
+   data-palette. Andere Paletten setzen data-palette; Modus bleibt data-theme. */
 :root {
-  /* "Schreibtisch" — warmes Papier, Tinte, Haarlinien (Light) */
+  /* „Schreibtisch" (Light) — Default */
   --paper: #faf9f6;
   --surface: #ffffff;
   --ink: #1a1917;
@@ -13,71 +18,328 @@
   --tinte-strong: #1d3494;
   --btn: #2440b3;
   --btn-strong: #1d3494;
-  --btn-ink: #ffffff;
   --unread: #b45309;
-  --hover: #f1efea;
-  --tint: #ebeef9;
   --danger: #b4483c;
-  --danger-bg: #f6e8e4;
   --success: #4c8a55;
-  --success-bg: #e9efe6;
   --warm: #8c5a2f;
-  --warm-bg: #fbf3ec;
-  /* Kategorie-Chip-Akzente (Light) — BG wird per color-mix daraus getönt. */
+  --btn-ink: #ffffff;
+
+  /* Abgeleitet — folgen jeder Palette & jedem Modus */
+  --hover: color-mix(in srgb, var(--ink) 6.5%, var(--paper));
+  --tint: color-mix(in srgb, var(--tinte) 12%, var(--surface));
+  --danger-bg: color-mix(in srgb, var(--danger) 13%, var(--surface));
+  --success-bg: color-mix(in srgb, var(--success) 13%, var(--surface));
+  --warm-bg: color-mix(in srgb, var(--warm) 13%, var(--surface));
+
+  /* Kategorie-Chip-Akzente (Light) — modusabhängig, nicht palettenabhängig. */
   --chip-gray: #4b5563; --chip-sky: #0369a1; --chip-red: #b91c1c; --chip-amber: #b45309;
   --chip-orange: #c2410c; --chip-violet: #6d28d9; --chip-green: #15803d; --chip-teal: #0f766e; --chip-pink: #be185d;
+
   /* Mail-Bogen: bleibt IMMER hell — E-Mails sind für Weiß gestaltet. */
   --mail-paper: #ffffff;
   --mail-ink: #1a1917;
 }
 
-/* "Nachttisch" — warme dunkle Töne, kein kaltes Schwarz, Tinte aufgehellt.
-   Systemwunsch als Default; der Theme-Umschalter setzt data-theme und gewinnt. */
+/* „Nachttisch" — Systemwunsch als Default; data-theme gewinnt. */
 @media (prefers-color-scheme: dark) {
   :root {
-    --paper: #1b1a17;
-    --surface: #232220;
-    --ink: #e8e5dc;
-    --muted: #979283;
-    --hairline: #37352f;
-    --tinte: #9baaec;
-    --tinte-strong: #b3c0f0;
-    --btn: #4257c4;
-    --btn-strong: #5568d4;
-    --btn-ink: #ffffff;
-    --unread: #e0a063;
-    --hover: #2c2a26;
-    --tint: #2a2e3d;
-    --danger: #e08a7e;
-    --danger-bg: #3a2320;
-    --success: #8fbf97;
-    --success-bg: #202a22;
-    --warm: #cba06b;
-    --warm-bg: #2e2620;
+  --paper: #1b1a17;
+  --surface: #232220;
+  --ink: #e8e5dc;
+  --muted: #979283;
+  --hairline: #37352f;
+  --tinte: #9baaec;
+  --tinte-strong: #b3c0f0;
+  --btn: #4257c4;
+  --btn-strong: #5568d4;
+  --unread: #e0a063;
+  --danger: #e08a7e;
+  --success: #8fbf97;
+  --warm: #cba06b;
     --chip-gray: #a6adba; --chip-sky: #6cb6e0; --chip-red: #e8938a; --chip-amber: #d3a562;
-    --chip-orange: #dd9a6b; --chip-violet: #b6a0e6; --chip-green: #86c28f; --chip-teal: #6cbdb2; --chip-pink: #e090b4;
+  --chip-orange: #dd9a6b; --chip-violet: #b6a0e6; --chip-green: #86c28f; --chip-teal: #6cbdb2; --chip-pink: #e090b4;
   }
 }
 
 :root[data-theme='light'] {
-  --paper: #faf9f6; --surface: #ffffff; --ink: #1a1917; --muted: #6f6a61;
-  --hairline: #e8e5df; --tinte: #2440b3; --tinte-strong: #1d3494; --unread: #b45309;
-  --btn: #2440b3; --btn-strong: #1d3494; --btn-ink: #ffffff;
-  --hover: #f1efea; --tint: #ebeef9; --danger: #b4483c; --danger-bg: #f6e8e4;
-  --success: #4c8a55; --success-bg: #e9efe6; --warm: #8c5a2f; --warm-bg: #fbf3ec;
-  /* Kategorie-Chip-Akzente (Light) — BG wird per color-mix daraus getönt. */
+  --paper: #faf9f6;
+  --surface: #ffffff;
+  --ink: #1a1917;
+  --muted: #6f6a61;
+  --hairline: #e8e5df;
+  --tinte: #2440b3;
+  --tinte-strong: #1d3494;
+  --btn: #2440b3;
+  --btn-strong: #1d3494;
+  --unread: #b45309;
+  --danger: #b4483c;
+  --success: #4c8a55;
+  --warm: #8c5a2f;
   --chip-gray: #4b5563; --chip-sky: #0369a1; --chip-red: #b91c1c; --chip-amber: #b45309;
   --chip-orange: #c2410c; --chip-violet: #6d28d9; --chip-green: #15803d; --chip-teal: #0f766e; --chip-pink: #be185d;
 }
 
 :root[data-theme='dark'] {
-  --paper: #1b1a17; --surface: #232220; --ink: #e8e5dc; --muted: #979283;
-  --hairline: #37352f; --tinte: #9baaec; --tinte-strong: #b3c0f0; --unread: #e0a063;
-  --btn: #4257c4; --btn-strong: #5568d4; --btn-ink: #ffffff;
-  --hover: #2c2a26; --tint: #2a2e3d; --danger: #e08a7e; --danger-bg: #3a2320;
-  --success: #8fbf97; --success-bg: #202a22; --warm: #cba06b; --warm-bg: #2e2620;
+  --paper: #1b1a17;
+  --surface: #232220;
+  --ink: #e8e5dc;
+  --muted: #979283;
+  --hairline: #37352f;
+  --tinte: #9baaec;
+  --tinte-strong: #b3c0f0;
+  --btn: #4257c4;
+  --btn-strong: #5568d4;
+  --unread: #e0a063;
+  --danger: #e08a7e;
+  --success: #8fbf97;
+  --warm: #cba06b;
   --chip-gray: #a6adba; --chip-sky: #6cb6e0; --chip-red: #e8938a; --chip-amber: #d3a562;
   --chip-orange: #dd9a6b; --chip-violet: #b6a0e6; --chip-green: #86c28f; --chip-teal: #6cbdb2; --chip-pink: #e090b4;
+}
+
+/* Palette „nord" */
+:root[data-palette='nord'] {
+  --paper: #f2f4f8;
+  --surface: #fbfcfe;
+  --ink: #2e3440;
+  --muted: #5a6478;
+  --hairline: #dde3ec;
+  --tinte: #45688f;
+  --tinte-strong: #3a5679;
+  --btn: #4c6f98;
+  --btn-strong: #3f5e83;
+  --unread: #b26b3f;
+  --danger: #a84f58;
+  --success: #5c7a4a;
+  --warm: #b5713f;
+}
+:root[data-palette='nord'][data-theme='dark'] {
+  --paper: #2e3440;
+  --surface: #363d4a;
+  --ink: #eceff4;
+  --muted: #9aa4b8;
+  --hairline: #434c5e;
+  --tinte: #88c0d0;
+  --tinte-strong: #a3d0dc;
+  --btn: #5e81ac;
+  --btn-strong: #6d8fba;
+  --unread: #ebcb8b;
+  --danger: #d3868f;
+  --success: #a3be8c;
+  --warm: #d8a07a;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-palette='nord']:not([data-theme='light']) {
+    --paper: #2e3440;
+    --surface: #363d4a;
+    --ink: #eceff4;
+    --muted: #9aa4b8;
+    --hairline: #434c5e;
+    --tinte: #88c0d0;
+    --tinte-strong: #a3d0dc;
+    --btn: #5e81ac;
+    --btn-strong: #6d8fba;
+    --unread: #ebcb8b;
+    --danger: #d3868f;
+    --success: #a3be8c;
+    --warm: #d8a07a;
+  }
+}
+
+/* Palette „sepia" */
+:root[data-palette='sepia'] {
+  --paper: #f3ecda;
+  --surface: #fbf6ea;
+  --ink: #3b3126;
+  --muted: #7c6c52;
+  --hairline: #e4d9c1;
+  --tinte: #9a5b28;
+  --tinte-strong: #7d4a20;
+  --btn: #8a5626;
+  --btn-strong: #6f4420;
+  --unread: #a2621d;
+  --danger: #a5443a;
+  --success: #5f7040;
+  --warm: #8a5a2b;
+}
+:root[data-palette='sepia'][data-theme='dark'] {
+  --paper: #2a2318;
+  --surface: #342c1f;
+  --ink: #ece1cd;
+  --muted: #a99a7d;
+  --hairline: #45392a;
+  --tinte: #d9a86a;
+  --tinte-strong: #e3bd8a;
+  --btn: #a9743f;
+  --btn-strong: #c08a52;
+  --unread: #e0aa62;
+  --danger: #dd8f80;
+  --success: #a5bd8a;
+  --warm: #d4a56a;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-palette='sepia']:not([data-theme='light']) {
+    --paper: #2a2318;
+    --surface: #342c1f;
+    --ink: #ece1cd;
+    --muted: #a99a7d;
+    --hairline: #45392a;
+    --tinte: #d9a86a;
+    --tinte-strong: #e3bd8a;
+    --btn: #a9743f;
+    --btn-strong: #c08a52;
+    --unread: #e0aa62;
+    --danger: #dd8f80;
+    --success: #a5bd8a;
+    --warm: #d4a56a;
+  }
+}
+
+/* Palette „wald" */
+:root[data-palette='wald'] {
+  --paper: #f2f5ee;
+  --surface: #fbfcf8;
+  --ink: #1f2a20;
+  --muted: #5b6a58;
+  --hairline: #dbe4d5;
+  --tinte: #35704a;
+  --tinte-strong: #2a5a3b;
+  --btn: #35704a;
+  --btn-strong: #2a5a3b;
+  --unread: #a86a20;
+  --danger: #a94a3e;
+  --success: #35704a;
+  --warm: #7d6a2f;
+}
+:root[data-palette='wald'][data-theme='dark'] {
+  --paper: #161d17;
+  --surface: #1e271f;
+  --ink: #e1e8dc;
+  --muted: #8b9a86;
+  --hairline: #2e382d;
+  --tinte: #86c091;
+  --tinte-strong: #a1d0aa;
+  --btn: #4c8a5c;
+  --btn-strong: #5fa06f;
+  --unread: #dba766;
+  --danger: #df8b7e;
+  --success: #86c091;
+  --warm: #c9a86a;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-palette='wald']:not([data-theme='light']) {
+    --paper: #161d17;
+    --surface: #1e271f;
+    --ink: #e1e8dc;
+    --muted: #8b9a86;
+    --hairline: #2e382d;
+    --tinte: #86c091;
+    --tinte-strong: #a1d0aa;
+    --btn: #4c8a5c;
+    --btn-strong: #5fa06f;
+    --unread: #dba766;
+    --danger: #df8b7e;
+    --success: #86c091;
+    --warm: #c9a86a;
+  }
+}
+
+/* Palette „rose" */
+:root[data-palette='rose'] {
+  --paper: #f9f3f4;
+  --surface: #fffdfd;
+  --ink: #2b2226;
+  --muted: #75606a;
+  --hairline: #ecdde2;
+  --tinte: #a2496b;
+  --tinte-strong: #863a58;
+  --btn: #a2496b;
+  --btn-strong: #863a58;
+  --unread: #b06a1d;
+  --danger: #b0453e;
+  --success: #5c7a54;
+  --warm: #986a3c;
+}
+:root[data-palette='rose'][data-theme='dark'] {
+  --paper: #1e1a1c;
+  --surface: #272225;
+  --ink: #ecdfe3;
+  --muted: #a08b93;
+  --hairline: #3a3236;
+  --tinte: #dd8fab;
+  --tinte-strong: #e8a9c0;
+  --btn: #b05e79;
+  --btn-strong: #c8718e;
+  --unread: #dca06a;
+  --danger: #e08a80;
+  --success: #9dbf90;
+  --warm: #cda06a;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-palette='rose']:not([data-theme='light']) {
+    --paper: #1e1a1c;
+    --surface: #272225;
+    --ink: #ecdfe3;
+    --muted: #a08b93;
+    --hairline: #3a3236;
+    --tinte: #dd8fab;
+    --tinte-strong: #e8a9c0;
+    --btn: #b05e79;
+    --btn-strong: #c8718e;
+    --unread: #dca06a;
+    --danger: #e08a80;
+    --success: #9dbf90;
+    --warm: #cda06a;
+  }
+}
+
+/* Palette „graphit" */
+:root[data-palette='graphit'] {
+  --paper: #f5f5f3;
+  --surface: #ffffff;
+  --ink: #1b1b19;
+  --muted: #6a6a66;
+  --hairline: #e2e2de;
+  --tinte: #33322f;
+  --tinte-strong: #1b1b19;
+  --btn: #2b2b28;
+  --btn-strong: #1b1b19;
+  --unread: #9a6a1f;
+  --danger: #a5423a;
+  --success: #4a7350;
+  --warm: #86602f;
+}
+:root[data-palette='graphit'][data-theme='dark'] {
+  --paper: #191918;
+  --surface: #222220;
+  --ink: #e6e6e2;
+  --muted: #9a9a95;
+  --hairline: #333331;
+  --tinte: #d0d0ca;
+  --tinte-strong: #eaeae4;
+  --btn: #4a4a46;
+  --btn-strong: #5c5c57;
+  --unread: #d8a45f;
+  --danger: #dd8a80;
+  --success: #93bd8f;
+  --warm: #c9a068;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-palette='graphit']:not([data-theme='light']) {
+    --paper: #191918;
+    --surface: #222220;
+    --ink: #e6e6e2;
+    --muted: #9a9a95;
+    --hairline: #333331;
+    --tinte: #d0d0ca;
+    --tinte-strong: #eaeae4;
+    --btn: #4a4a46;
+    --btn-strong: #5c5c57;
+    --unread: #d8a45f;
+    --danger: #dd8a80;
+    --success: #93bd8f;
+    --warm: #c9a068;
+  }
 }
 
 html,
@@ -100,19 +362,9 @@ body {
   outline-offset: 1px;
 }
 
+/* Auswahl folgt der Palette (getönte Tinte). */
 ::selection {
-  background: rgba(36, 64, 179, 0.14);
-}
-@media (prefers-color-scheme: dark) {
-  ::selection {
-    background: rgba(155, 170, 236, 0.28);
-  }
-}
-:root[data-theme='dark'] ::selection {
-  background: rgba(155, 170, 236, 0.28);
-}
-:root[data-theme='light'] ::selection {
-  background: rgba(36, 64, 179, 0.14);
+  background: color-mix(in srgb, var(--tinte) 22%, transparent);
 }
 
 /* Gestaffeltes Einblenden der Listenzeilen (animation-delay per Index, gedeckelt bei ~15) */

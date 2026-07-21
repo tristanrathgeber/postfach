@@ -9,18 +9,26 @@ import { useToast } from './Toast'
 import { SpinnerIcon, XIcon } from './Icons'
 import { FolderMapSection } from './FolderMapSection'
 import { AccountsSection } from './AccountsSection'
+import { PALETTES } from '../lib/themes'
 
-type SettingsModalProps = {
-  accounts: Account[]
+type Appearance = {
   theme: import('../hooks/usePreferences').Theme
   onThemeChange: (t: import('../hooks/usePreferences').Theme) => void
   density: import('../hooks/usePreferences').Density
   onDensityChange: (d: import('../hooks/usePreferences').Density) => void
+  palette: import('../lib/themes').PaletteId
+  onPaletteChange: (p: import('../lib/themes').PaletteId) => void
+  accent: string | null
+  onAccentChange: (a: string | null) => void
+}
+
+type SettingsModalProps = Appearance & {
+  accounts: Account[]
   onClose: () => void
 }
 
 /** Einstellungen (Zahnrad): Signaturen pro Konto + Snippets — Speichern per PUT beim Schließen. */
-export function SettingsModal({ accounts, theme, onThemeChange, density, onDensityChange, onClose }: SettingsModalProps) {
+export function SettingsModal({ accounts, onClose, ...appearance }: SettingsModalProps) {
   const settingsQuery = useSettings()
   const snippetsQuery = useSnippets()
   const ready = settingsQuery.data !== undefined && snippetsQuery.data !== undefined
@@ -29,10 +37,7 @@ export function SettingsModal({ accounts, theme, onThemeChange, density, onDensi
     return (
       <SettingsForm
         accounts={accounts}
-        theme={theme}
-        onThemeChange={onThemeChange}
-        density={density}
-        onDensityChange={onDensityChange}
+        {...appearance}
         initialSignatures={settingsQuery.data.signatures}
         initialNotifications={settingsQuery.data.notifications}
         initialUndoSeconds={settingsQuery.data.undo_seconds}
@@ -86,18 +91,18 @@ function SettingsForm({
   onThemeChange,
   density,
   onDensityChange,
+  palette,
+  onPaletteChange,
+  accent,
+  onAccentChange,
   initialSignatures,
   initialNotifications,
   initialUndoSeconds,
   initialAiEnabled,
   initialSnippets,
   onClose,
-}: {
+}: Appearance & {
   accounts: Account[]
-  theme: import('../hooks/usePreferences').Theme
-  onThemeChange: (t: import('../hooks/usePreferences').Theme) => void
-  density: import('../hooks/usePreferences').Density
-  onDensityChange: (d: import('../hooks/usePreferences').Density) => void
   initialSignatures: Record<string, string>
   initialNotifications: Record<string, boolean>
   initialUndoSeconds: number
@@ -210,6 +215,61 @@ function SettingsForm({
             </div>
           </div>
           <p className="mt-1.5 text-[11.5px] text-muted">Dunkel lässt die Original-Mail auf hellem Papier — E-Mails sind für Weiß gestaltet.</p>
+
+          {/* Farbthema: kuratierte Paletten + optionaler eigener Akzent */}
+          <div className="mt-4">
+            <span className="text-[13px]">Farbthema</span>
+            <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-6">
+              {PALETTES.map((p) => {
+                const active = palette === p.id
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => onPaletteChange(p.id)}
+                    title={p.hint}
+                    aria-pressed={active}
+                    className={`flex flex-col items-center gap-1.5 rounded-lg border p-2 text-center transition ${
+                      active ? 'border-tinte bg-tint' : 'border-hairline hover:border-muted'
+                    }`}
+                  >
+                    <span
+                      className="flex h-7 w-full items-center justify-center gap-1 rounded"
+                      style={{ background: p.swatch[0] }}
+                    >
+                      <span className="h-3.5 w-3.5 rounded-full" style={{ background: p.swatch[1] }} />
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ background: p.swatch[2] }} />
+                    </span>
+                    <span className={`text-[11px] ${active ? 'text-tinte' : 'text-muted'}`}>{p.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-[13px]">
+                <span>Eigener Akzent</span>
+                <input
+                  type="color"
+                  value={accent ?? '#2440b3'}
+                  onChange={(e) => onAccentChange(e.target.value)}
+                  className="h-7 w-9 cursor-pointer rounded border border-hairline bg-surface p-0.5"
+                  aria-label="Akzentfarbe wählen"
+                />
+              </label>
+              {accent && (
+                <button
+                  type="button"
+                  onClick={() => onAccentChange(null)}
+                  className="rounded px-2 py-1 text-[12px] text-muted transition hover:text-ink"
+                >
+                  Zurücksetzen
+                </button>
+              )}
+              <span className="text-[11.5px] text-muted">
+                {accent ? 'Überschreibt den Palettenakzent.' : 'Aus — die Palette bestimmt den Akzent.'}
+              </span>
+            </div>
+          </div>
         </section>
 
         {/* Signaturen pro Konto */}
