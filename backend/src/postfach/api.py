@@ -23,6 +23,7 @@ from email_agent.textutil import truncate
 
 from .config import MailAccount
 from .mail_imap import ParsedMail
+from .search import thread_root_for
 from .sanitize import sanitize_mail_html
 
 router = APIRouter()
@@ -136,7 +137,47 @@ def messages(request: Request, account: str, folder: str = "INBOX", limit: int =
     with request.app.state.open_mailbox(acc) as box:
         mails = box.list_messages(folder, limit)
     categories = request.app.state.ai.cached_categories(account, folder, [m.uid for m in mails])
-    return [_summary(account, folder, m, categories.get(m.uid)) for m in mails]
+    # Thread-Zähler aus den GESPEICHERTEN Roots (inkl. Betreff-Fallback) —
+    # die Live-Ableitung deckt nur frisch eingetroffene, unindexierte Mails.
+    index = request.app.state.search
+    roots: dict[int, str] = {}
+    counts: dict[str, int] = {}
+    if index.is_ready(account):
+        roots = index.thread_roots_of(account, folder, [m.uid for m in mails])
+        for m in mails:
+            roots.setdefault(m.uid, thread_root_for(m))
+        counts = index.thread_counts(account, list(roots.values()))
+    return [
+        {
+            **_summary(account, folder, m, categories.get(m.uid)),
+            "thread_count": max(counts.get(roots.get(m.uid, ""), 1), 1),
+        }
+        for m in mails
+    ]
+
+
+@router.get("/messages/{account}/{uid}/thread")
+def message_thread(request: Request, account: str, uid: int, folder: str = "INBOX"):
+    """Der Gesprächsfaden der Mail — kontoweit (inkl. Gesendet), chronologisch.
+    Ohne Index-Eintrag: [] (die UI zeigt die Leiste ohnehin erst ab 2 Mails —
+    ein IMAP-Roundtrip für einen unsichtbaren Ein-Mail-Faden wäre Verschwendung)."""
+    from .mail_imap import is_sent_folder
+
+    _account(request, account)
+    index = request.app.state.search
+    hits: list[dict] = []
+    if index.is_ready(account):
+        root = index.thread_root_of(account, folder, uid)
+        if root:
+            hits = index.thread(account, root)
+    categories = request.app.state.ai.cached_categories_many(
+        account, [(h["folder"], h["uid"]) for h in hits]
+    )
+    for h in hits:
+        h["category"] = categories.get((h["folder"], h["uid"]))
+        # Gesendet-Wissen bleibt im Backend — die UI verschont diese Kopien.
+        h["is_sent"] = is_sent_folder(h["folder"])
+    return hits
 
 
 @router.get("/messages/{account}/{uid}")
@@ -624,7 +665,10 @@ def search(request: Request, account: str, q: str, folder: str = "INBOX"):
     with request.app.state.open_mailbox(acc) as box:
         mails = box.search(folder, q)
     categories = request.app.state.ai.cached_categories(account, folder, [m.uid for m in mails])
-    return [_summary(account, folder, m, categories.get(m.uid)) for m in mails]
+    return [
+        {**_summary(account, folder, m, categories.get(m.uid)), "thread_count": 1}
+        for m in mails
+    ]
 
 
 @router.get("/search/status")

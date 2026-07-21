@@ -35,10 +35,10 @@ Leitplanken (gelten für jeden Batch):
 - [x] Suche über ALLE Ordner des Kontos (Treffer zeigen ihren Ordner); live über den Push-Hook, Move-Aktionen räumen Einträge, Voll-Lauf prunt; IMAP-SEARCH nur noch Fallback vor dem ersten Index
 - [ ] Begründung: Suche ist laut Recherche der #1-Wechselgrund; local-first kann hier strukturell gewinnen
 
-## Batch 4 — Konversations-Threads (groß)
-- [ ] Threading über References/In-Reply-To (+ Betreff-Fallback), saubere Thread-Trennung
-- [ ] Thread-Ansicht im Reader (chronologisch, einklappbare Einzelmails)
-- [ ] Thread-Triage (Archiv/Papierkorb für ganzen Thread), Zähler in der Liste
+## Batch 4 — Konversations-Threads (groß) ✅ 2026-07-21
+- [x] Threading über References/In-Reply-To + konservativer Betreff-Fallback (nur eindeutiger Kandidat mit passender Gegenseite); leere Message-IDs und kaputte Ketten zerfallen sauber statt falsch zu verkleben
+- [x] Konversationsleiste im Reader: chronologisch über ALLE Ordner inkl. Gesendet, klickbare Zeilen mit Ordner-Label, aktuelle hervorgehoben
+- [x] Faden-Triage (Archiv/Papierkorb — Gesendet-Kopien bleiben verschont) + (n)-Zähler in der Liste
 
 ## Batch 5 — Zeit-Features (groß): Undo, Später, Snooze, Follow-up
 - [ ] **Undo-Send** (verzögertes Senden, konfigurierbar 10–30 s)

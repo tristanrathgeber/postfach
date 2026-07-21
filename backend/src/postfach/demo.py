@@ -21,7 +21,7 @@ _NEWSLETTER_HTML = (
 )
 
 
-def _mail(uid, subject, from_name, from_addr, body, *, seen=True, html=None, headers=None, attachments=()):
+def _mail(uid, subject, from_name, from_addr, body, *, seen=True, html=None, headers=None, attachments=(), references="", date_iso=None):
     return ParsedMail(
         uid=uid,
         subject=subject,
@@ -31,8 +31,8 @@ def _mail(uid, subject, from_name, from_addr, body, *, seen=True, html=None, hea
         cc=(),
         reply_to=None,
         message_id=f"<demo-{uid}@demo.example>",
-        references="",
-        date_iso=f"2026-07-19T09:{uid % 60:02d}:00+02:00",
+        references=references,
+        date_iso=date_iso or f"2026-07-19T09:{uid % 60:02d}:00+02:00",
         seen=seen,
         body_text=body,
         body_html_raw=html,
@@ -43,6 +43,8 @@ def _mail(uid, subject, from_name, from_addr, body, *, seen=True, html=None, hea
 
 def _sample_inbox() -> list[ParsedMail]:
     return [
+        _mail(114, "Vereinsheim Schlüssel", "Martin Becker", "m.becker@web.example",
+              "Hi Alex, hast du den Schlüssel fürs Vereinsheim? Ich komme sonst nicht rein.\nVG Martin"),
         _mail(112, "3D Print Weekly #47 — PETG-CF im Härtetest", "3D Print Weekly", "newsletter@3dprintweekly.example",
               "PETG-CF im Härtetest, neue Slicer-Profile, Bambu-Firmware.", seen=False, html=_NEWSLETTER_HTML,
               headers={"list-unsubscribe": "<https://3dprintweekly.example/unsub>"}),
@@ -80,7 +82,8 @@ class DemoMailbox:
             "INBOX": _sample_inbox(),
             "Gesendet": [
                 _mail(11, "Re: Vereinsheim Schlüssel", "Alex", "alex@demo.example",
-                      "Hi Martin,\n\nklar, ich bringe den Schlüssel mit.\n\nViele Grüße\nAlex"),
+                      "Hi Martin,\n\nklar, ich bringe den Schlüssel mit.\n\nViele Grüße\nAlex",
+                      references="<demo-114@demo.example>", date_iso="2026-07-19T10:30:00+02:00"),
             ],
             "Papierkorb": [],
             "Archive": [],

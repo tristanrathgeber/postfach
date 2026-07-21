@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query'
 import { api, errText } from '../lib/api'
-import type { Detail, MsgRef } from '../lib/types'
-import { formatFullDate, formatSize } from '../lib/format'
-import { isSpamFolder } from '../lib/folders'
+import type { Detail, MsgRef, ThreadMail } from '../lib/types'
+import { formatFullDate, formatListDate, formatSize } from '../lib/format'
+import { folderLeaf, isSpamFolder } from '../lib/folders'
 import { Chip } from './Chip'
 import { EmptyState } from './EmptyState'
 import { HtmlMailFrame } from './HtmlMailFrame'
@@ -22,6 +22,10 @@ type ReaderProps = {
   /** Alle konfigurierten Kategorien fürs Korrektur-Menü. */
   categories: string[]
   onChangeCategory: (detail: Detail, category: string) => void
+  /** Klick auf eine Faden-Mail: im Reader öffnen. */
+  onOpenThreadMail: (mail: ThreadMail) => void
+  /** Faden-Triage (Gesendet-Kopien sind bereits herausgefiltert). */
+  onThreadAction: (mails: ThreadMail[], action: 'archive' | 'trash') => void
 }
 
 function ActionButton({
@@ -57,11 +61,90 @@ function AddressLine({ label, value }: { label: string; value: string }) {
   )
 }
 
-export function Reader({ opened, imagesEnabled, onEnableImages, onReply, onForward, onArchive, onTrash, onToggleSeen, onToggleSpam, categories, onChangeCategory }: ReaderProps) {
+function ThreadRail({
+  thread,
+  current,
+  onOpen,
+  onAction,
+}: {
+  thread: ThreadMail[]
+  current: MsgRef
+  onOpen: (mail: ThreadMail) => void
+  onAction: (mails: ThreadMail[], action: 'archive' | 'trash') => void
+}) {
+  // Gesendet-Kopien räumt man nicht weg — das Wissen liefert der Server.
+  const triagable = thread.filter((m) => !m.is_sent)
+  return (
+    <section className="mt-4 rounded border border-hairline bg-surface" aria-label="Konversation">
+      <header className="flex items-center gap-2 border-b border-hairline px-3 py-1.5">
+        <span className="font-mono text-[10px] uppercase tracking-[0.1em] text-muted">
+          Konversation ({thread.length})
+        </span>
+        <span className="flex-1" />
+        {triagable.length > 0 ? (
+          <>
+            <button
+              type="button"
+              onClick={() => onAction(triagable, 'archive')}
+              title="Alle empfangenen Mails des Fadens archivieren"
+              className="rounded px-1.5 py-0.5 font-mono text-[10.5px] text-muted transition hover:bg-[#F1EFEA] hover:text-tinte"
+            >
+              Faden archivieren
+            </button>
+            <button
+              type="button"
+              onClick={() => onAction(triagable, 'trash')}
+              title="Alle empfangenen Mails des Fadens in den Papierkorb"
+              className="rounded px-1.5 py-0.5 font-mono text-[10.5px] text-muted transition hover:bg-[#F1EFEA] hover:text-red-700"
+            >
+              Papierkorb
+            </button>
+          </>
+        ) : null}
+      </header>
+      <ol>
+        {thread.map((m) => {
+          const isCurrent = m.account === current.account && m.folder === current.folder && m.uid === current.uid
+          return (
+            <li key={`${m.folder}:${m.uid}`}>
+              <button
+                type="button"
+                disabled={isCurrent}
+                onClick={() => onOpen(m)}
+                aria-current={isCurrent || undefined}
+                className={`flex w-full items-baseline gap-2 border-b border-hairline px-3 py-1.5 text-left last:border-b-0 ${
+                  isCurrent ? 'bg-[#EFF2FB]' : 'hover:bg-[#F8F7F4]'
+                }`}
+              >
+                {!m.seen ? <span className="h-[5px] w-[5px] shrink-0 self-center rounded-full bg-unread" aria-label="Ungelesen" /> : null}
+                <span className={`min-w-0 shrink-0 truncate text-[12.5px] ${isCurrent ? 'font-medium text-tinte' : ''}`}>
+                  {m.from_name || m.from_addr}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-[12px] text-muted">{m.snippet}</span>
+                <span className="shrink-0 rounded bg-[#F1EFEA] px-1 font-mono text-[9.5px] text-muted">
+                  {folderLeaf(m.folder)}
+                </span>
+                <time className="shrink-0 font-mono text-[10px] text-muted">{formatListDate(m.date)}</time>
+              </button>
+            </li>
+          )
+        })}
+      </ol>
+    </section>
+  )
+}
+
+export function Reader({ opened, imagesEnabled, onEnableImages, onReply, onForward, onArchive, onTrash, onToggleSeen, onToggleSpam, categories, onChangeCategory, onOpenThreadMail, onThreadAction }: ReaderProps) {
   const detailQuery = useQuery({
     queryKey: ['message', opened?.account, opened?.folder, opened?.uid],
     queryFn: () => api.message(opened!.account, opened!.uid, opened!.folder),
     enabled: opened !== null,
+  })
+  const threadQuery = useQuery({
+    queryKey: ['thread', opened?.account, opened?.folder, opened?.uid],
+    queryFn: () => api.thread(opened!.account, opened!.uid, opened!.folder),
+    enabled: opened !== null,
+    staleTime: 30_000,
   })
 
   if (!opened) {
@@ -162,6 +245,15 @@ export function Reader({ opened, imagesEnabled, onEnableImages, onReply, onForwa
               ) : null}
             </div>
           </header>
+
+          {(threadQuery.data?.length ?? 0) > 1 ? (
+            <ThreadRail
+              thread={threadQuery.data!}
+              current={opened}
+              onOpen={onOpenThreadMail}
+              onAction={onThreadAction}
+            />
+          ) : null}
 
           {/* Banner: blockierte externe Bilder */}
           {blockedImages && !imagesEnabled ? (

@@ -4,6 +4,9 @@
 const JUNK_NAMES = new Set(['spam', 'junk', 'junk-e-mail', 'spamverdacht', 'werbung', 'bulk mail'])
 
 export function isSpamFolder(folder: string): boolean {
-  const leaf = folder.split('/').at(-1)?.split('.').at(-1)?.toLowerCase() ?? ''
-  return JUNK_NAMES.has(folder.toLowerCase()) || JUNK_NAMES.has(leaf)
+  return JUNK_NAMES.has(folder.toLowerCase()) || JUNK_NAMES.has(folderLeaf(folder).toLowerCase())
+}
+
+export function folderLeaf(folder: string): string {
+  return folder.split('/').at(-1)?.split('.').at(-1) ?? folder
 }

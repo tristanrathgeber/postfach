@@ -5,7 +5,7 @@ from postfach.app import create_app
 
 SUMMARY_KEYS = {
     "account", "folder", "uid", "subject", "from_name", "from_addr",
-    "date", "snippet", "seen", "has_attachments", "category",
+    "date", "snippet", "seen", "has_attachments", "category", "thread_count",
 }
 
 

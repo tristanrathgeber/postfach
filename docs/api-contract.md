@@ -134,3 +134,16 @@ Move-Aktionen ENTFERNEN den Index-Eintrag (IMAP vergibt im Ziel neue UIDs —
 ein Umzug wäre ein toter Treffer); der nächste Index-Lauf nimmt die Mail neu
 auf und räumt extern Verschwundenes ab (Pruning). read/unread halten `seen`
 im Index aktuell.
+
+## Nachtrag v0.6 — Batch 4 „Konversations-Threads" (eingefroren 2026-07-21)
+
+| Methode & Pfad | Request | Response |
+|---|---|---|
+| `GET /api/messages/{account}/{uid}/thread?folder=` | — | `[Summary & {"is_sent": bool}]` — der Gesprächsfaden, chronologisch aufsteigend, über ALLE Ordner (inkl. Gesendet). Ohne vollen Index/Eintrag: `[]` (UI zeigt die Leiste erst ab 2 Mails) |
+| `GET /api/messages` | unverändert | `Summary` zusätzlich `"thread_count": number` (1 = Einzelmail; ohne vollen Index immer 1) |
+
+Threading: `thread_root` = References[0] → In-Reply-To → eigene Message-ID;
+Betreff-Fallback nur beim Index-Lauf und nur bei eindeutigem Kandidaten.
+Thread-Triage läuft über die bestehende `POST /api/batch-action` mit den
+UIDs des Fadens (Client-seitig pro Ordner gruppiert; Gesendet-Kopien werden
+von der UI nicht angefasst).

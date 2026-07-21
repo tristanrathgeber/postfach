@@ -1,6 +1,7 @@
 import { memo } from 'react'
 import type { Summary } from '../lib/types'
 import { formatListDate, msgKey } from '../lib/format'
+import { folderLeaf } from '../lib/folders'
 import { Chip } from './Chip'
 import { ArchiveIcon, CheckIcon, MailIcon, MailOpenIcon, PaperclipIcon, TrashIcon } from './Icons'
 
@@ -103,11 +104,16 @@ export const MessageRow = memo(function MessageRow({
         {unread ? <span className="h-[6px] w-[6px] shrink-0 rounded-full bg-unread" aria-label="Ungelesen" /> : null}
         <span className={`min-w-0 flex-1 truncate text-[13px] ${unread ? 'font-semibold' : ''}`}>
           {msg.from_name || msg.from_addr}
+          {msg.thread_count > 1 ? (
+            <span className="ml-1.5 font-mono text-[10.5px] font-normal text-muted" title={`${msg.thread_count} Mails im Gespräch`}>
+              ({msg.thread_count})
+            </span>
+          ) : null}
         </span>
         <span className="flex shrink-0 items-center gap-1.5 text-muted group-hover:invisible">
           {showFolder && msg.folder !== 'INBOX' ? (
             <span className="max-w-[110px] truncate rounded bg-[#F1EFEA] px-1 font-mono text-[9.5px]">
-              {msg.folder.split('/').at(-1)?.split('.').at(-1)}
+              {folderLeaf(msg.folder)}
             </span>
           ) : null}
           {msg.has_attachments ? <PaperclipIcon size={12} /> : null}

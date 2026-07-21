@@ -680,6 +680,12 @@ function Postfach() {
             onToggleSpam={(detail, spam) => removeMessage(refOf(detail), spam ? 'spam' : 'unspam')}
             categories={categoriesQuery.data ?? []}
             onChangeCategory={changeCategory}
+            onOpenThreadMail={openMessage}
+            onThreadAction={(mails, action) => {
+              bulkMutate({ targets: mails, action })
+              const keys = new Set(mails.map(msgKey))
+              setOpened((cur) => (cur && keys.has(msgKey(cur)) ? null : cur))
+            }}
           />
         }
         aside={

@@ -13,6 +13,7 @@ IMAP vergibt im Zielordner neue UIDs, ein „Umzug" wäre ein toter Treffer.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -45,8 +46,13 @@ CREATE TABLE IF NOT EXISTS mails (
   seen INTEGER NOT NULL DEFAULT 1,
   snippet TEXT NOT NULL DEFAULT '',
   body TEXT NOT NULL DEFAULT '',
+  message_id TEXT NOT NULL DEFAULT '',
+  thread_root TEXT NOT NULL DEFAULT '',
+  subject_norm TEXT NOT NULL DEFAULT '',
   UNIQUE(account, folder, uid)
 );
+CREATE INDEX IF NOT EXISTS idx_thread ON mails(account, thread_root);
+CREATE INDEX IF NOT EXISTS idx_subject_norm ON mails(account, subject_norm);
 CREATE TABLE IF NOT EXISTS meta (
   account TEXT PRIMARY KEY,
   full_index_at TEXT NOT NULL
@@ -87,6 +93,35 @@ class Query:
     before: str | None = None
     after: str | None = None
     has_attachment: bool | None = None
+
+
+_REPLY_PREFIX_RE = re.compile(r"^\s*((re|aw|antw|fwd?|wg)\s*:\s*)+", re.IGNORECASE)
+
+
+def normalize_subject(subject: str) -> str:
+    """Re:/AW:/Fwd:-Präfixe ab, getrimmt, lowercase — für den Betreff-Fallback."""
+    return _REPLY_PREFIX_RE.sub("", subject or "").strip().lower()
+
+
+_MSGID_RE = re.compile(r"<[^>]+>")
+
+
+def _parse_refs(references: str) -> list[str]:
+    """Nur echte <Message-IDs> — RFC-5322-Kommentare u. Ä. ignorieren."""
+    return _MSGID_RE.findall(references or "")
+
+
+def thread_root_for(mail) -> str:
+    """Wurzel des Gesprächsfadens: References[0] → eigene Message-ID →
+    synthetisch (stabil, aber eindeutig pro Mail — leere Message-IDs dürfen
+    nicht alle im selben Faden landen)."""
+    refs = _parse_refs(mail.references)
+    if refs:
+        return refs[0]
+    if mail.message_id:
+        return mail.message_id
+    seed = f"{mail.subject}|{mail.from_addr}|{mail.date_iso}|{mail.uid}"
+    return "<synth-" + hashlib.sha1(seed.encode()).hexdigest()[:16] + ">"
 
 
 _OPERATORS = {"von": "from_", "an": "to", "betreff": "subject", "vor": "before", "nach": "after"}
@@ -140,7 +175,18 @@ class SearchIndex:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
         with self._connect() as conn:
+            self._migrate(conn)
             conn.executescript(_SCHEMA)
+
+    @staticmethod
+    def _migrate(conn: sqlite3.Connection) -> None:
+        """Bestands-DBs (v0.5) um die Thread-Spalten ergänzen — die Werte
+        füllt der nächste Voll-Index."""
+        existing = {row[1] for row in conn.execute("PRAGMA table_info(mails)")}
+        if existing:
+            for column in ("message_id", "thread_root", "subject_norm"):
+                if column not in existing:
+                    conn.execute(f"ALTER TABLE mails ADD COLUMN {column} TEXT NOT NULL DEFAULT ''")
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self._path, timeout=10)
@@ -148,9 +194,75 @@ class SearchIndex:
         conn.execute("PRAGMA journal_mode=WAL")
         return conn
 
+    def _fallback_root(self, conn, account: str, mail, chunk_seen: dict) -> str | None:
+        """Betreff-Fallback für Antworten OHNE Referenzen (kaputte Clients):
+        nur wenn GENAU EIN Kandidaten-Faden mit passendem Betreff und
+        beteiligter Gegenseite existiert — nie raten. Kandidaten kommen aus der
+        DB UND aus dem aktuellen Chunk (der Voll-Index sieht sonst nichts)."""
+        norm = normalize_subject(mail.subject)
+        if not norm or norm == (mail.subject or "").strip().lower():
+            return None  # kein Antwort-Präfix → keine Zuordnung per Betreff
+        addr = (mail.from_addr or "").lower()
+        # Token-Match: ' addr ' im gepolsterten Empfänger-String — a@x.de darf
+        # nicht via Substring an petra@x.de andocken.
+        rows = conn.execute(
+            "SELECT DISTINCT thread_root FROM mails"
+            " WHERE account=? AND subject_norm=? AND thread_root != ''"
+            " AND (lower(from_addr)=? OR instr(' '||lower(recipients)||' ', ' '||?||' ') > 0)"
+            " LIMIT 3",
+            (account, norm, addr, addr),
+        ).fetchall()
+        candidates = {r[0] for r in rows}
+        for root, c_from, c_recipients in chunk_seen.get(norm, ()):
+            if c_from == addr or f" {addr} " in f" {c_recipients} ":
+                candidates.add(root)
+        return next(iter(candidates)) if len(candidates) == 1 else None
+
+    _UPSERT_COMMON = (
+        " subject=excluded.subject, from_name=excluded.from_name,"
+        " from_addr=excluded.from_addr, from_text=excluded.from_text,"
+        " recipients=excluded.recipients, date_iso=excluded.date_iso,"
+        " has_attachments=excluded.has_attachments, seen=excluded.seen,"
+        " snippet=excluded.snippet, body=excluded.body,"
+        " message_id=excluded.message_id, subject_norm=excluded.subject_norm"
+    )
+    _INSERT_SQL = (
+        "INSERT INTO mails (account, folder, uid, subject, from_name, from_addr,"
+        " from_text, recipients, date_iso, has_attachments, seen, snippet, body,"
+        " message_id, thread_root, subject_norm)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+    )
+
     def add_mails(self, account: str, folder: str, mails: list) -> int:
-        rows = [
-            (
+        if not mails:
+            return 0
+        # Chronologisch verarbeiten: der Betreff-Fallback muss die Wurzel
+        # gesehen haben, BEVOR die kaputte Antwort dran ist (list_messages
+        # liefert absteigend — genau verkehrt herum).
+        ordered = sorted(mails, key=lambda m: m.date_iso or "")
+        try:
+            with self._lock:
+                for i in range(0, len(ordered), _WRITE_CHUNK):
+                    chunk = ordered[i : i + _WRITE_CHUNK]
+                    with self._connect() as conn:
+                        self._insert_chunk(conn, account, folder, chunk)
+        except sqlite3.Error:
+            log.exception("Such-Index: add_mails fehlgeschlagen (%s/%s)", account, folder)
+            return 0
+        return len(mails)
+
+    def _insert_chunk(self, conn, account: str, folder: str, chunk: list) -> None:
+        with_refs, without_refs = [], []
+        chunk_seen: dict[str, list] = {}
+        for m in chunk:
+            has_refs = bool(_parse_refs(m.references))
+            root = thread_root_for(m)
+            if not has_refs:
+                root = self._fallback_root(conn, account, m, chunk_seen) or root
+            chunk_seen.setdefault(normalize_subject(m.subject), []).append(
+                (root, (m.from_addr or "").lower(), " ".join((*m.to, *m.cc)).lower())
+            )
+            row = (
                 account, folder, m.uid,
                 m.subject or "", m.from_name or "", m.from_addr or "",
                 f"{m.from_name} {m.from_addr}".strip(),
@@ -158,31 +270,24 @@ class SearchIndex:
                 m.date_iso or "", int(bool(m.attachments)), int(bool(m.seen)),
                 truncate(re.sub(r"\s+", " ", (m.body_text or "")[:2000]).strip(), 120),
                 (m.body_text or "")[:_BODY_CAP],
+                m.message_id or "", root, normalize_subject(m.subject),
             )
-            for m in mails
-        ]
-        if not rows:
-            return 0
-        try:
-            with self._lock:
-                for i in range(0, len(rows), _WRITE_CHUNK):
-                    with self._connect() as conn:
-                        conn.executemany(
-                            "INSERT INTO mails (account, folder, uid, subject, from_name, from_addr,"
-                            " from_text, recipients, date_iso, has_attachments, seen, snippet, body)"
-                            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
-                            " ON CONFLICT(account, folder, uid) DO UPDATE SET"
-                            " subject=excluded.subject, from_name=excluded.from_name,"
-                            " from_addr=excluded.from_addr, from_text=excluded.from_text,"
-                            " recipients=excluded.recipients, date_iso=excluded.date_iso,"
-                            " has_attachments=excluded.has_attachments, seen=excluded.seen,"
-                            " snippet=excluded.snippet, body=excluded.body",
-                            rows[i : i + _WRITE_CHUNK],
-                        )
-        except sqlite3.Error:
-            log.exception("Such-Index: add_mails fehlgeschlagen (%s/%s)", account, folder)
-            return 0
-        return len(rows)
+            (with_refs if has_refs else without_refs).append(row)
+        if with_refs:
+            conn.executemany(
+                self._INSERT_SQL + " ON CONFLICT(account, folder, uid) DO UPDATE SET"
+                + self._UPSERT_COMMON + ", thread_root=excluded.thread_root",
+                with_refs,
+            )
+        if without_refs:
+            # Referenzlose Mails: ein früher per Fallback gefundener Root bleibt
+            # erhalten — ein Re-Index darf den Faden nicht wieder zerreißen.
+            conn.executemany(
+                self._INSERT_SQL + " ON CONFLICT(account, folder, uid) DO UPDATE SET"
+                + self._UPSERT_COMMON
+                + ", thread_root=COALESCE(NULLIF(mails.thread_root, ''), excluded.thread_root)",
+                without_refs,
+            )
 
     def remove_mails(self, account: str, folder: str, uids: list[int]) -> None:
         """Mail wurde verschoben/entsorgt: Eintrag raus (IMAP vergibt im Ziel
@@ -252,6 +357,66 @@ class SearchIndex:
             row = conn.execute("SELECT 1 FROM meta WHERE account=?", (account,)).fetchone()
         return row is not None
 
+    # --- Konversations-Threads ---
+
+    _HIT_SELECT = (
+        "SELECT account, folder, uid, subject, from_name, from_addr,"
+        " date_iso, snippet, seen, has_attachments FROM mails"
+    )
+
+    def thread(self, account: str, root: str) -> list[dict]:
+        """Alle Mails des Fadens, kontoweit, chronologisch aufsteigend."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                f"{self._HIT_SELECT} WHERE account=? AND thread_root=?"
+                " ORDER BY date_iso ASC LIMIT 100",
+                (account, root),
+            ).fetchall()
+        return [{**self._row_to_summary(row), "thread_count": len(rows)} for row in rows]
+
+    def thread_roots_of(self, account: str, folder: str, uids: list[int]) -> dict[int, str]:
+        """Gespeicherte Roots (inkl. Betreff-Fallback) für eine Listen-Seite."""
+        if not uids:
+            return {}
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT uid, thread_root FROM mails WHERE account=? AND folder=?"
+                " AND uid IN (SELECT value FROM json_each(?)) AND thread_root != ''",
+                (account, folder, json.dumps(uids)),
+            ).fetchall()
+        return dict(rows)
+
+    def thread_root_of(self, account: str, folder: str, uid: int) -> str | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT thread_root FROM mails WHERE account=? AND folder=? AND uid=?",
+                (account, folder, uid),
+            ).fetchone()
+        return row[0] if row and row[0] else None
+
+    def thread_counts(self, account: str, roots: list[str]) -> dict[str, int]:
+        """EIN Query für die Zähler einer ganzen Listen-Seite."""
+        if not roots:
+            return {}
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT thread_root, COUNT(*) FROM mails"
+                " WHERE account=? AND thread_root IN (SELECT value FROM json_each(?))"
+                " GROUP BY thread_root",
+                (account, json.dumps(sorted(set(roots)))),
+            ).fetchall()
+        return dict(rows)
+
+    @staticmethod
+    def _row_to_summary(row) -> dict:
+        acc, fol, uid, subject, from_name, from_addr, date, snippet, seen, atts = row
+        return {
+            "account": acc, "folder": fol, "uid": uid, "subject": subject,
+            "from_name": from_name, "from_addr": from_addr, "date": date,
+            "snippet": snippet, "seen": bool(seen),
+            "has_attachments": bool(atts), "category": None,
+        }
+
     def count(self, account: str) -> int:
         with self._connect() as conn:
             [(n,)] = conn.execute("SELECT COUNT(*) FROM mails WHERE account=?", (account,))
@@ -278,7 +443,7 @@ class SearchIndex:
 
         select = (
             "SELECT m.account, m.folder, m.uid, m.subject, m.from_name, m.from_addr,"
-            " m.date_iso, m.snippet, m.seen, m.has_attachments"
+            " m.date_iso, m.snippet, m.seen, m.has_attachments, m.thread_root"
         )
         if match:
             # bm25-Gewichte: Betreff > Absender/Empfänger > Body; Gleichstand → neuer zuerst
@@ -303,12 +468,8 @@ class SearchIndex:
             # aber eine Suche darf niemals einen 500er produzieren.
             log.exception("Such-Index: Query fehlgeschlagen (%s, %r)", account, q)
             return []
+        counts = self.thread_counts(account, [row[10] for row in rows if row[10]])
         return [
-            {
-                "account": acc, "folder": fol, "uid": uid, "subject": subject,
-                "from_name": from_name, "from_addr": from_addr, "date": date,
-                "snippet": snippet, "seen": bool(seen),
-                "has_attachments": bool(atts), "category": None,
-            }
-            for acc, fol, uid, subject, from_name, from_addr, date, snippet, seen, atts in rows
+            {**self._row_to_summary(row[:10]), "thread_count": max(counts.get(row[10], 1), 1)}
+            for row in rows
         ]

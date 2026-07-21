@@ -4,6 +4,7 @@
 // 4xx/5xx; Konto nicht erreichbar → 502.
 
 import type {
+  ThreadMail,
   Account,
   Classification,
   Contact,
@@ -167,6 +168,10 @@ export const api = {
 
   /** GET /api/status — Watcher-Verbindungsstatus je Konto. */
   status: (): Promise<{ accounts: Record<string, AccountStatus> }> => request('/status'),
+
+  /** GET /api/messages/{account}/{uid}/thread — Gesprächsfaden, kontoweit, chronologisch. */
+  thread: (account: string, uid: number, folder: string): Promise<ThreadMail[]> =>
+    request(`/messages/${enc(account)}/${uid}/thread?folder=${enc(folder)}`),
 
   /** GET /api/search/status — 0 = schnelle Suche noch nicht aufgebaut. */
   searchStatus: (account: string): Promise<{ indexed: number; ready: boolean }> =>

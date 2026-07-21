@@ -125,7 +125,9 @@ def parse_full(uid: int, raw: bytes, seen: bool) -> ParsedMail:
         cc=_addresses(msg, "Cc"),
         reply_to=reply_to or None,
         message_id=str(msg.get("Message-ID", "")).strip(),
-        references=str(msg.get("References", "")).strip(),
+        # Viele Clients setzen nur In-Reply-To — als References-Ersatz nutzen
+        # (Threading-Wurzel wäre sonst blind für deren Antworten).
+        references=(str(msg.get("References", "")).strip() or str(msg.get("In-Reply-To", "")).strip()),
         date_iso=_date_iso(msg),
         seen=seen,
         body_text=body_text,

@@ -71,6 +71,7 @@ export function useMailActions() {
       // Erneut patchen: der parallele Detail-GET kann nach dem optimistischen
       // Patch mit altem seen-Wert aufgelöst worden sein (Race beim Öffnen).
       patchMessage(qc, ref, { seen })
+      void qc.invalidateQueries({ queryKey: ['thread', ref.account], refetchType: 'none' })
     },
   })
 
@@ -105,6 +106,7 @@ export function useMailActions() {
       for (const g of groupByFolder(targets)) {
         void qc.invalidateQueries({ queryKey: ['messages', g.account, g.folder], refetchType: 'none' })
         void qc.invalidateQueries({ queryKey: ['search', g.account], refetchType: 'none' })
+        void qc.invalidateQueries({ queryKey: ['thread', g.account] })
         // „Kein Spam" verschiebt IN die Inbox — deren Cache aktiv nachladen,
         // sonst fehlt die Mail dort bis zum nächsten Poll.
         if (action === 'unspam') void qc.invalidateQueries({ queryKey: ['messages', g.account, 'INBOX'] })

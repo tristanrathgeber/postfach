@@ -14,6 +14,8 @@ export type Summary = {
   seen: boolean
   has_attachments: boolean
   category: string | null // z. B. "Newsletter", "Rechnungen" … oder null = unklassifiziert
+  /** Mails im Gesprächsfaden (1 = Einzelmail; ohne vollen Index immer 1). */
+  thread_count: number
 }
 
 export type Attachment = {
@@ -111,6 +113,9 @@ export type Settings = {
   /** Benachrichtigungen pro Konto; fehlender Eintrag = an. */
   notifications: Record<string, boolean>
 }
+
+/** GET .../thread — Faden-Mail: Summary + Server-Wissen über Gesendet-Kopien. */
+export type ThreadMail = Summary & { is_sent: boolean }
 
 /** POST /api/batch-action — Bulk-Triage über EINE Verbindung, kein send. */
 export type BatchAction = 'read' | 'unread' | 'archive' | 'trash' | 'spam' | 'unspam'
