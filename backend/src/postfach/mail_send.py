@@ -68,6 +68,33 @@ def build_outgoing(
     return mime.as_bytes(), message_id
 
 
+def build_invite_reply(
+    from_addr: str,
+    organizer: str,
+    subject: str,
+    body: str,
+    ics_bytes: bytes,
+) -> tuple[bytes, str]:
+    """RSVP-Mail an den Organisator: Text + `text/calendar; method=REPLY`.
+    Reine Folge eines Nutzer-Klicks (kein AI-Pfad)."""
+    mime = MimeMessage()
+    mime["From"] = _clean(from_addr)
+    mime["To"] = _clean(organizer)
+    mime["Subject"] = _clean(subject)
+    message_id = make_msgid()
+    mime["Message-ID"] = message_id
+    mime.set_content(body)
+    # Der Kalender-Teil ist die eigentliche Antwort für den Server des Organisators.
+    mime.add_attachment(
+        ics_bytes,
+        maintype="text",
+        subtype="calendar",
+        params={"method": "REPLY", "charset": "UTF-8"},
+        filename="invite.ics",
+    )
+    return mime.as_bytes(), message_id
+
+
 def send_mail(account: MailAccount, password: str, mime_bytes: bytes) -> None:
     msg = email.message_from_bytes(mime_bytes, policy=default_policy)
     # Bcc-Invariante am Transport erzwingen, nicht smtplib überlassen:

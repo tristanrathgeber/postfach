@@ -13,6 +13,7 @@ import type {
   EmiliaStreamEvent,
   NlSearchResult,
   ThreadSummary,
+  InviteResponse,
   ThreadMail,
   Account,
   Classification,
@@ -315,4 +316,14 @@ export const api = {
   /** POST /api/emilia/thread_summary — Zusammenfassung NUR auf Klick. */
   threadSummary: (body: { account: string; folder: string; uid: number }): Promise<ThreadSummary> =>
     post('/emilia/thread_summary', body),
+
+  // --- Batch 8: Kalender-RSVP + Markdown-Export (Nachtrag v0.10) ---
+
+  /** POST /api/invite/respond — RSVP an den Organisator (Nutzer-Klick). */
+  inviteRespond: (body: { account: string; folder: string; uid: number; response: InviteResponse }): Promise<{ ok: true; warning?: string }> =>
+    post('/invite/respond', body),
+
+  /** GET /api/messages/{account}/{uid}/export — Mail als Obsidian-Markdown. */
+  exportMarkdown: (account: string, uid: number, folder = 'INBOX'): Promise<{ filename: string; markdown: string }> =>
+    request(`/messages/${enc(account)}/${enc(String(uid))}/export?folder=${enc(folder)}`),
 }

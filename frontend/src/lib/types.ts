@@ -34,6 +34,33 @@ export type Detail = Summary & {
   body_html: string | null // sanitisiert, Remote-Bilder BLOCKIERT (src entfernt, data-blocked-src gesetzt)
   body_html_images: string | null // sanitisiert, Remote-Bilder erlaubt (für "Bilder laden")
   attachments: Attachment[]
+  invite: Invite | null // ICS-Einladung (nur METHOD:REQUEST)
+  entities: Entity[] // lokal extrahierte Chips (Termine, Beträge, Sendungen)
+}
+
+// --- Batch 8: Kalender & Struktur (Nachtrag v0.10) ---
+
+/** ICS-Einladung (Kalender-RSVP). start/end ISO-8601 oder JJJJ-MM-TT (all_day). */
+export type Invite = {
+  summary: string
+  start: string
+  end: string
+  all_day: boolean
+  location: string
+  organizer_name: string
+  organizer_email: string
+  method: string
+  uid: string
+}
+
+export type InviteResponse = 'accepted' | 'tentative' | 'declined'
+
+/** Lokal extrahierter Chip. url nur bei Sendungsnummern (Anbieter-Tracking). */
+export type Entity = {
+  kind: 'date' | 'amount' | 'tracking'
+  text: string
+  value: string
+  url?: string
 }
 
 export type Classification = {

@@ -68,6 +68,7 @@ class ParsedMail:
     body_html_raw: str | None
     attachments: tuple[AttachmentMeta, ...] = field(default_factory=tuple)
     headers: dict = field(default_factory=dict)  # lowercase keys (für AI-Heuristik)
+    calendar_raw: str | None = None  # roher text/calendar-Teil (ICS-Einladung)
 
 
 def _addresses(msg, header: str) -> tuple[str, ...]:
@@ -83,19 +84,32 @@ def _date_iso(msg) -> str:
 
 
 def _walk_parts(msg):
-    text, html = None, None
+    text, html, calendar = None, None, None
     attachments = []
     for part in msg.walk():
         if part.get_content_maintype() == "multipart":
             continue
+        ctype = part.get_content_type()
         filename = part.get_filename()
-        if filename or part.get_content_disposition() == "attachment":
+        is_attachment = bool(filename or part.get_content_disposition() == "attachment")
+        # text/calendar: Einladungen kommen oft als Anhang (invite.ics) UND als
+        # inline-Teil — der mit METHOD:REQUEST gewinnt für die Karte.
+        if ctype == "text/calendar":
+            content = _content(part)
+            if calendar is None or "METHOD:REQUEST" in content.upper():
+                calendar = content
+            # Ein echter .ics-ANHANG bleibt herunterladbar (nur der reine
+            # inline-Teil ohne Dateiname verschwindet aus der Liste).
+            if is_attachment:
+                attachments.append(part)
+            continue
+        if is_attachment:
             attachments.append(part)
-        elif part.get_content_type() == "text/plain" and text is None:
+        elif ctype == "text/plain" and text is None:
             text = part
-        elif part.get_content_type() == "text/html" and html is None:
+        elif ctype == "text/html" and html is None:
             html = part
-    return text, html, attachments
+    return text, html, attachments, calendar
 
 
 def _content(part) -> str:
@@ -110,7 +124,7 @@ def parse_full(uid: int, raw: bytes, seen: bool) -> ParsedMail:
     msg = email.message_from_bytes(raw, policy=default_policy)
     from_name, from_addr = email.utils.parseaddr(str(msg.get("From", "")))
     _, reply_to = email.utils.parseaddr(str(msg.get("Reply-To", "")))
-    text_part, html_part, attachment_parts = _walk_parts(msg)
+    text_part, html_part, attachment_parts, calendar_raw = _walk_parts(msg)
     body_html_raw = _content(html_part) if html_part is not None else None
     body_text = _content(text_part).strip() if text_part is not None else (
         html_to_text(body_html_raw) if body_html_raw else ""
@@ -142,6 +156,7 @@ def parse_full(uid: int, raw: bytes, seen: bool) -> ParsedMail:
         body_html_raw=body_html_raw,
         attachments=attachments,
         headers={k.lower(): str(v) for k, v in msg.items()},
+        calendar_raw=calendar_raw,
     )
 
 
@@ -193,7 +208,7 @@ class Mailbox:
         if raw is None:
             return []
         msg = email.message_from_bytes(raw, policy=default_policy)
-        _t, _h, attachment_parts = _walk_parts(msg)
+        _t, _h, attachment_parts, _cal = _walk_parts(msg)
         return [
             AttachmentFile(
                 filename=str(part.get_filename() or f"anhang-{i}"),

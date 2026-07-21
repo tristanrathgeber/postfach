@@ -69,10 +69,13 @@ Leitplanken (gelten für jeden Batch):
 - [x] Globaler, sichtbarer KI-Aus-Schalter (Anti-Superhuman: alles abschaltbar)
   - settings.ai_enabled: 403 auf classify/draft/emilia/*/search/nl (außer index/status — FTS + Kontakte sind keine KI); UI blendet alles KI-hafte aus; Kategorie-Cache bleibt lesbar
 
-## Batch 8 — Kalender-Minimum & Export
-- [ ] **ICS-Einladungen inline** mit Zusagen/Ablehnen (sendet echte Antwort) — deckt ~80 % des Kalenderbedarfs ohne Kalender-App-Falle
-- [ ] **Mail → Task/Markdown/Obsidian-Export** (die Integration, die Notion Mail nie geliefert hat)
-- [ ] Struktur-Extraktion lokal: Termine, Beträge, Tracking-Nummern als klickbare Chips
+## Batch 8 — Kalender-Minimum & Export ✅ (2026-07-21)
+- [x] **ICS-Einladungen inline** mit Zusagen/Ablehnen (sendet echte Antwort) — deckt ~80 % des Kalenderbedarfs ohne Kalender-App-Falle
+  - invites.py (icalendar): parse_invite (untrusted → None, all-day/TZID), build_invite_reply_ics (RFC-5546 REPLY, PARTSTAT); ParsedMail.calendar_raw; Einladungskarte im Reader (Zusagen/Vielleicht/Absagen); POST /invite/respond → RSVP an Organisator über Versandpfad (Sent-Ablage); organizer_email auf genau eine Adresse geprüft (kein Auffächern)
+- [x] **Mail → Task/Markdown/Obsidian-Export** (die Integration, die Notion Mail nie geliefert hat)
+  - mdexport.py: YAML-Frontmatter (Backslash-sicher) + Klartext-Body; GET .../export → {filename, markdown}; UI „Als Markdown" (Blob-Download + Clipboard)
+- [x] Struktur-Extraktion lokal: Termine, Beträge, Tracking-Nummern als klickbare Chips
+  - extract.py: regelbasiert (kein LLM), possessive Regex + 10k-Cap gegen ReDoS; Sendungsnummern UPS/DHL/Hermes/DPD → Anbieter-Tracking (Host-Allowlist); Chips im Reader (Kopieren / Tracking-Link). Real: „11,88 €" auf Hetzner-Rechnung erkannt
 
 ## Batch 9 — Onboarding & deutsche Provider
 - [ ] **Konto-Einrichtung per UI** (Formular statt YAML), Passwörter in den macOS-Schlüsselbund

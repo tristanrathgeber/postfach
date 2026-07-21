@@ -8,7 +8,11 @@ import { folderLeaf, isSpamFolder } from '../lib/folders'
 import { Chip } from './Chip'
 import { EmptyState } from './EmptyState'
 import { HtmlMailFrame } from './HtmlMailFrame'
+import { InviteCard } from './InviteCard'
+import { EntityChips } from './EntityChips'
+import { useToast } from './Toast'
 import { AlertIcon, ArchiveIcon, ClockIcon, DownloadIcon, ForwardIcon, MailIcon, MailOpenIcon, PaperclipIcon, ReplyIcon, SparklesIcon, SpinnerIcon, TrashIcon } from './Icons'
+import type { InviteResponse } from '../lib/types'
 
 type ReaderProps = {
   opened: MsgRef | null
@@ -41,7 +45,7 @@ function ActionButton({
   children,
 }: {
   label: string
-  hint: string
+  hint?: string
   onClick: () => void
   children: React.ReactNode
 }) {
@@ -49,7 +53,7 @@ function ActionButton({
     <button
       type="button"
       onClick={onClick}
-      title={`${label} (${hint})`}
+      title={hint ? `${label} (${hint})` : label}
       className="flex items-center gap-1.5 rounded border border-hairline bg-surface px-2.5 py-1 text-[12px] transition hover:border-tinte hover:text-tinte"
     >
       {children}
@@ -177,12 +181,51 @@ function ThreadRail({
 }
 
 export function Reader({ opened, imagesEnabled, onEnableImages, onReply, onForward, onArchive, onTrash, onToggleSeen, onToggleSpam, onSnooze, categories, onChangeCategory, onOpenThreadMail, aiEnabled = true, onThreadAction }: ReaderProps) {
+  const { showToast } = useToast()
   const [snoozeOpen, setSnoozeOpen] = useState(false)
   useEffect(() => setSnoozeOpen(false), [opened])
+  // RSVP-Antwort merken (pro geöffneter Mail), damit die Karte nach dem Senden
+  // den Status zeigt statt erneut die Knöpfe.
+  const [answered, setAnswered] = useState<InviteResponse | null>(null)
+  const openedKey = opened ? `${opened.account}:${opened.folder}:${opened.uid}` : null
+  useEffect(() => setAnswered(null), [openedKey])
   const detailQuery = useQuery({
     queryKey: ['message', opened?.account, opened?.folder, opened?.uid],
     queryFn: () => api.message(opened!.account, opened!.uid, opened!.folder),
     enabled: opened !== null,
+  })
+  const rsvpMutation = useMutation({
+    mutationFn: (v: { ref: MsgRef; response: InviteResponse }) =>
+      api.inviteRespond({ account: v.ref.account, folder: v.ref.folder, uid: v.ref.uid, response: v.response }),
+    onSuccess: (result, v) => {
+      setAnswered(v.response)
+      showToast(result.warning ?? 'Antwort an den Organisator gesendet.')
+    },
+    onError: (e) => showToast(`Antwort fehlgeschlagen: ${errText(e)}`, 'error'),
+  })
+  const exportMutation = useMutation({
+    mutationFn: (ref: MsgRef) => api.exportMarkdown(ref.account, ref.uid, ref.folder),
+    onSuccess: ({ filename, markdown }) => {
+      // Lokaler Download (Blob) + optionale Kopie — kein Server-Roundtrip.
+      const url = URL.createObjectURL(new Blob([markdown], { type: 'text/markdown' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      a.click()
+      // Revoke erst nach dem Tick — sofortiges Revoke kann große Downloads kappen.
+      setTimeout(() => URL.revokeObjectURL(url), 0)
+      // Toast nur „kopiert" melden, wenn die Zwischenablage wirklich verfügbar war.
+      const copy = navigator.clipboard?.writeText(markdown)
+      if (copy) {
+        copy.then(
+          () => showToast('Als Markdown kopiert und heruntergeladen.'),
+          () => showToast('Als Markdown heruntergeladen.'),
+        )
+      } else {
+        showToast('Als Markdown heruntergeladen.')
+      }
+    },
+    onError: (e) => showToast(`Export fehlgeschlagen: ${errText(e)}`, 'error'),
   })
   const threadQuery = useQuery({
     queryKey: ['thread', opened?.account, opened?.folder, opened?.uid],
@@ -297,6 +340,12 @@ export function Reader({ opened, imagesEnabled, onEnableImages, onReply, onForwa
               <ActionButton label={detail.seen ? 'Ungelesen' : 'Gelesen'} hint="u" onClick={() => onToggleSeen(detail)}>
                 {detail.seen ? <MailIcon size={13} /> : <MailOpenIcon size={13} />}
               </ActionButton>
+              <ActionButton
+                label={exportMutation.isPending ? 'Exportiere …' : 'Als Markdown'}
+                onClick={() => exportMutation.mutate(opened)}
+              >
+                <DownloadIcon size={13} />
+              </ActionButton>
               {detail.attachments.length > 0 ? (
                 <span className="ml-auto flex items-center gap-1 font-mono text-[11px] text-muted">
                   <PaperclipIcon size={12} />
@@ -305,6 +354,17 @@ export function Reader({ opened, imagesEnabled, onEnableImages, onReply, onForwa
               ) : null}
             </div>
           </header>
+
+          {detail.invite ? (
+            <InviteCard
+              invite={detail.invite}
+              answered={answered}
+              pending={rsvpMutation.isPending}
+              onRespond={(response) => rsvpMutation.mutate({ ref: opened, response })}
+            />
+          ) : null}
+
+          {(detail.entities?.length ?? 0) > 0 ? <EntityChips entities={detail.entities} /> : null}
 
           {(threadQuery.data?.length ?? 0) > 1 ? (
             <ThreadRail

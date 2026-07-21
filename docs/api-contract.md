@@ -197,3 +197,18 @@ nur die Embeddings — FTS-Suche und Kontakt-Ernte sind keine KI) und
 `/emilia/status` (Anzeige). Kategorie-Cache bleibt lesbar. Nach Reaktivierung
 holt der nächste Voll-Index übersprungene Embeddings nach.
 Streaming-Transport: `application/x-ndjson`, eine JSON-Zeile pro Ereignis.
+
+## Nachtrag v0.10 — Batch 8 „Kalender-Minimum & Export" (eingefroren 2026-07-21)
+
+| Methode & Pfad | Request | Response |
+|---|---|---|
+| `GET /api/messages/{account}/{uid}?folder=` | — | Detail zusätzlich: `"invite": Invite\|null`, `"entities": Entity[]` |
+| `POST /api/invite/respond` | `{"account","folder","uid","response":"accepted"\|"tentative"\|"declined"}` | `{"ok":true}` bzw. `{"ok":true,"warning":"…"}`; 404 ohne Einladung |
+| `GET /api/messages/{account}/{uid}/export?folder=` | — | `{"filename":"…​.md","markdown":"…"}` |
+
+`Invite` = `{summary, start, end, all_day, location, organizer_name,
+organizer_email, method, uid}` (start/end ISO-8601 oder Datum bei all_day).
+`Entity` = `{kind:"date"\|"amount"\|"tracking", text, value, url?}` — `url`
+nur bei Sendungsnummern (Anbieter-Tracking, Host-Allowlist).
+RSVP läuft über den normalen Versandpfad (Nutzer-Klick, Sent-Ablage);
+`text/calendar; method=REPLY` mit echtem ATTENDEE-PARTSTAT.

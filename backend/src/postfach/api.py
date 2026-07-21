@@ -24,6 +24,7 @@ from email_agent.llm.base import LLMError
 from email_agent.textutil import truncate
 
 from .config import MailAccount
+from .extract import extract_entities
 from .mail_imap import ParsedMail
 from .search import thread_root_for
 from .sanitize import sanitize_mail_html
@@ -221,6 +222,24 @@ def message_detail(request: Request, account: str, uid: int, folder: str = "INBO
             {"index": a.index, "filename": a.filename, "content_type": a.content_type, "size": a.size}
             for a in mail.attachments
         ],
+        "invite": _invite_dict(mail),
+        "entities": extract_entities(mail.body_text),
+    }
+
+
+def _invite_dict(mail) -> dict | None:
+    """Nur echte Einladungen (METHOD:REQUEST) — Antworten/Absagen anderer
+    landen nicht als weitere Einladungskarte."""
+    from .invites import parse_invite
+
+    inv = parse_invite(mail.calendar_raw)
+    if inv is None or inv.method != "REQUEST":
+        return None
+    return {
+        "summary": inv.summary, "start": inv.start, "end": inv.end,
+        "all_day": inv.all_day, "location": inv.location,
+        "organizer_name": inv.organizer_name, "organizer_email": inv.organizer_email,
+        "method": inv.method, "uid": inv.uid,
     }
 
 
@@ -1020,3 +1039,69 @@ def emilia_thread_summary(request: Request, body: ThreadSummaryBody):
         raise HTTPException(404, "Kein Gesprächsfaden im Index für diese Mail")
     summary = request.app.state.emilia.summarize_thread(texts)
     return {"summary": summary, "mails": len(texts)}
+
+
+# --- Batch 8: Kalender-RSVP + Markdown-Export (Contract v0.10) ---
+
+
+class InviteRespondBody(BaseModel):
+    account: str
+    folder: str = "INBOX"
+    uid: int
+    response: Literal["accepted", "tentative", "declined"]
+
+
+_RSVP_LABEL = {"accepted": "Zusage", "tentative": "Vorbehalt", "declined": "Absage"}
+
+
+@router.post("/invite/respond")
+@_mailbox_errors
+def invite_respond(request: Request, body: InviteRespondBody):
+    """RSVP auf eine ICS-Einladung — explizite Nutzer-Aktion, geht über den
+    normalen Versandpfad an den Organisator (mit Sent-Ablage)."""
+    from .invites import build_invite_reply_ics, parse_invite
+    from .mail_send import build_invite_reply
+
+    import email.utils
+
+    acc = _account(request, body.account)
+    state = request.app.state
+    with state.open_mailbox(acc) as box:
+        mail = box.get_message(body.folder, body.uid)
+        inv = parse_invite(mail.calendar_raw) if mail else None
+        if inv is None or inv.method != "REQUEST" or not inv.organizer_email:
+            raise HTTPException(404, "Keine beantwortbare Einladung in dieser Mail")
+        # organizer_email ist UNTRUSTED (aus dem ICS): genau EINE wohlgeformte
+        # Adresse zulassen — sonst fächert getaddresses den RSVP an fremde
+        # Ziele auf (Spam-/Missbrauchs-Primitiv).
+        parsed = email.utils.getaddresses([inv.organizer_email])
+        if len(parsed) != 1 or "@" not in parsed[0][1] or " " in parsed[0][1]:
+            raise HTTPException(422, "Einladung ohne eindeutigen Organisator")
+        organizer = parsed[0][1]
+        ics = build_invite_reply_ics(mail.calendar_raw, acc.address, body.response)
+        label = _RSVP_LABEL[body.response]
+        subject = f"{label}: {inv.summary}" if inv.summary else label
+        text = f"{label} zur Einladung „{inv.summary}“." if inv.summary else f"{label} zur Einladung."
+        mime_bytes, _mid = build_invite_reply(acc.address, organizer, subject, text, ics)
+        state.smtp_send(acc, mime_bytes)
+        if acc.provider != "gmail":
+            try:
+                box.append_sent(mime_bytes)
+            except (IMAPClientError, OSError) as exc:
+                return {"ok": True, "warning": f"Gesendet — Ablage im Gesendet-Ordner schlug fehl: {exc}"}
+    return {"ok": True}
+
+
+@router.get("/messages/{account}/{uid}/export")
+@_mailbox_errors
+def export_markdown(request: Request, account: str, uid: int, folder: str = "INBOX"):
+    """Mail als Obsidian-taugliches Markdown (Frontmatter + Klartext)."""
+    from .mdexport import to_markdown
+
+    acc = _account(request, account)
+    with request.app.state.open_mailbox(acc) as box:
+        mail = box.get_message(folder, uid)
+    if mail is None:
+        raise HTTPException(404, f"Mail {uid} nicht gefunden")
+    filename, markdown = to_markdown(mail)
+    return {"filename": filename, "markdown": markdown}

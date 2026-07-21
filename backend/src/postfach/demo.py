@@ -21,7 +21,7 @@ _NEWSLETTER_HTML = (
 )
 
 
-def _mail(uid, subject, from_name, from_addr, body, *, seen=True, html=None, headers=None, attachments=(), references="", date_iso=None, to=("alex@demo.example",)):
+def _mail(uid, subject, from_name, from_addr, body, *, seen=True, html=None, headers=None, attachments=(), references="", date_iso=None, to=("alex@demo.example",), calendar_raw=None):
     return ParsedMail(
         uid=uid,
         subject=subject,
@@ -38,7 +38,26 @@ def _mail(uid, subject, from_name, from_addr, body, *, seen=True, html=None, hea
         body_html_raw=html,
         attachments=tuple(attachments),
         headers=headers or {},
+        calendar_raw=calendar_raw,
     )
+
+
+_DEMO_INVITE_ICS = """BEGIN:VCALENDAR
+PRODID:-//Demo//DE
+VERSION:2.0
+METHOD:REQUEST
+BEGIN:VEVENT
+UID:demo-vorstand-2026@sfcnahetal.example
+SEQUENCE:0
+SUMMARY:Vorstandssitzung SFC Nahetal
+DTSTART:20260724T180000Z
+DTEND:20260724T193000Z
+LOCATION:Vereinsheim, Nebenraum
+ORGANIZER;CN=Petra Meyer:mailto:petra@sfcnahetal.example
+ATTENDEE;CN=Alex;PARTSTAT=NEEDS-ACTION:mailto:alex@demo.example
+END:VEVENT
+END:VCALENDAR
+"""
 
 
 def _sample_inbox() -> list[ParsedMail]:
@@ -48,6 +67,10 @@ def _sample_inbox() -> list[ParsedMail]:
               "Super, danke! Dann bis Samstag um 10.\nVG Martin",
               references="<demo-114@demo.example> <demo-11@demo.example>",
               date_iso="2026-07-19T11:15:00+02:00"),
+        _mail(116, "Einladung: Vorstandssitzung SFC Nahetal", "Petra Meyer", "petra@sfcnahetal.example",
+              "Hallo Alex,\n\nanbei die Einladung zur Vorstandssitzung am 24.07. um 20:00 Uhr im "
+              "Vereinsheim. Bitte kurz zu- oder absagen.\n\nViele Grüße\nPetra",
+              seen=False, calendar_raw=_DEMO_INVITE_ICS),
         _mail(114, "Vereinsheim Schlüssel", "Martin Becker", "m.becker@web.example",
               "Hi Alex, hast du den Schlüssel fürs Vereinsheim? Ich komme sonst nicht rein.\nVG Martin"),
         _mail(112, "3D Print Weekly #47 — PETG-CF im Härtetest", "3D Print Weekly", "newsletter@3dprintweekly.example",
