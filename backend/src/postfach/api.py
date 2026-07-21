@@ -198,35 +198,45 @@ def _content_disposition(filename: str) -> str:
 def action(request: Request, account: str, uid: int, body: ActionBody):
     acc = _account(request, account)
     agent_config = request.app.state.config.agent
+    moved_to: str | None = None
     with request.app.state.open_mailbox(acc) as box:
         # exists() statt Voll-Download: Triage (j/e/j/e …) ist der heiße Pfad.
         if not box.exists(body.folder, uid):
             raise HTTPException(404, f"Mail {uid} nicht gefunden")
-        if body.action == "read":
-            box.set_seen(body.folder, uid, True)
-        elif body.action == "unread":
-            box.set_seen(body.folder, uid, False)
+        if body.action in ("read", "unread"):
+            box.set_seen(body.folder, uid, body.action == "read")
+            request.app.state.search.set_seen(account, body.folder, [uid], body.action == "read")
         elif body.action == "trash":
-            box.trash(body.folder, uid)
+            moved_to = box.trash_folder()
+            box.move(body.folder, uid, moved_to)
         elif body.action == "archive":
             category = request.app.state.ai.cached_categories(account, body.folder, [uid]).get(uid)
             # folder_for: respektiert per-Kategorie-Ordner-Mapping (z. B. INBOX/Abos auf GMX).
-            target = agent_config.folder_for(category) if category else box.archive_folder_default()
-            box.move(body.folder, uid, target, ensure=True)
+            moved_to = agent_config.folder_for(category) if category else box.archive_folder_default()
+            box.move(body.folder, uid, moved_to, ensure=True)
         elif body.action == "label":
             if not body.label:
                 raise HTTPException(422, "label fehlt")
-            box.move(body.folder, uid, agent_config.full_label(body.label), ensure=True)
+            moved_to = agent_config.full_label(body.label)
+            box.move(body.folder, uid, moved_to, ensure=True)
         elif body.action == "spam":
             target = box.junk_folder()
             if target != body.folder:  # Self-Move ist serverabhängig NO/UID-Wechsel
                 box.move(body.folder, uid, target)
+                moved_to = target
         elif body.action == "unspam":
             if body.folder != "INBOX":
                 box.move(body.folder, uid, "INBOX")
+                moved_to = "INBOX"
         else:
             raise HTTPException(422, f"Unbekannte Aktion „{body.action}“")
+    if moved_to:
+        # Verschoben = im Ziel neue UID → Index-Eintrag entfernen (Re-Index füllt nach)
+        request.app.state.search.remove_mails(account, body.folder, [uid])
     return {"ok": True}
+
+
+
 
 
 class BatchActionBody(BaseModel):
@@ -246,19 +256,24 @@ def batch_action(request: Request, body: BatchActionBody):
     uids = sorted(set(body.uids))
     if not uids:
         return {"ok": True, "done": 0}
+    removed: list[int] = []
     with request.app.state.open_mailbox(acc) as box:
         if body.action in ("read", "unread"):
             box.set_seen_many(body.folder, uids, body.action == "read")
+            request.app.state.search.set_seen(body.account, body.folder, uids, body.action == "read")
         elif body.action == "trash":
             # Ziel EINMAL auflösen — trash() würde pro UID neu resolven.
             box.move_many(body.folder, uids, box.trash_folder())
+            removed = uids
         elif body.action == "spam":
             target = box.junk_folder()
             if target != body.folder:
                 box.move_many(body.folder, uids, target)
+                removed = uids
         elif body.action == "unspam":
             if body.folder != "INBOX":
                 box.move_many(body.folder, uids, "INBOX")
+                removed = uids
         else:  # archive — Kategorie-Mapping gilt PRO Mail, also nach Ziel gruppieren
             categories = request.app.state.ai.cached_categories(body.account, body.folder, uids)
             by_target: dict[str, list[int]] = {}
@@ -268,6 +283,10 @@ def batch_action(request: Request, body: BatchActionBody):
                 by_target.setdefault(target, []).append(uid)
             for target, group in by_target.items():
                 box.move_many(body.folder, group, target, ensure=True)
+            removed = uids
+    if removed:
+        # Verschoben = im Ziel neue UIDs → Index-Einträge entfernen (Re-Index füllt nach)
+        request.app.state.search.remove_mails(body.account, body.folder, removed)
     return {"ok": True, "done": len(uids)}
 
 
@@ -430,9 +449,26 @@ def emilia_improve(request: Request, body: EmiliaImproveBody):
 @router.post("/emilia/index")
 @_mailbox_errors
 def emilia_index(request: Request, body: EmiliaIndexBody):
+    from datetime import datetime
+
+    from .emilia import iter_index_folders
+
     acc = _account(request, body.account)
+    search_index = request.app.state.search
+    emilia = request.app.state.emilia
+    indexed = 0
+    scanned: list[str] = []
+    # Ein Scan, zwei Abnehmer: Emilia-Gedächtnis + Volltext-Suche.
     with request.app.state.open_mailbox(acc) as box:
-        indexed = request.app.state.emilia.index(body.account, box, owner_addr=acc.address)
+        for folder in iter_index_folders(box):
+            mails = box.list_messages(folder, 10000)
+            indexed += emilia.index_mails(body.account, folder, mails, owner_addr=acc.address)
+            search_index.add_mails(body.account, folder, mails)
+            search_index.prune_folder(body.account, folder, [m.uid for m in mails])
+            scanned.append(folder)
+    # Extern verschwundene Ordner (und nie gescannte wie Papierkorb/Spam) räumen
+    search_index.prune_missing_folders(body.account, scanned)
+    search_index.mark_full_index(body.account, datetime.now().isoformat(timespec="seconds"))
     return {"indexed": indexed}
 
 
@@ -572,7 +608,28 @@ async def events(request: Request, once: int = 0):
 @_mailbox_errors
 def search(request: Request, account: str, q: str, folder: str = "INBOX"):
     acc = _account(request, account)
+    index = request.app.state.search
+    if index.is_ready(account):
+        # Schneller Pfad: lokaler FTS-Index über ALLE Ordner des Kontos.
+        # (Erst nach einem VOLLEN Index-Lauf — die paar Watcher-Zeilen eines
+        # frischen Setups dürfen den IMAP-Fallback nicht verschatten.)
+        hits = index.search(account, q)
+        categories = request.app.state.ai.cached_categories_many(
+            account, [(h["folder"], h["uid"]) for h in hits]
+        )
+        for h in hits:
+            h["category"] = categories.get((h["folder"], h["uid"]))
+        return hits
+    # Fallback (Index nie voll aufgebaut): IMAP-Suche im übergebenen Ordner.
     with request.app.state.open_mailbox(acc) as box:
         mails = box.search(folder, q)
     categories = request.app.state.ai.cached_categories(account, folder, [m.uid for m in mails])
     return [_summary(account, folder, m, categories.get(m.uid)) for m in mails]
+
+
+@router.get("/search/status")
+def search_status(request: Request, account: str):
+    """ready=False → UI weist darauf hin, dass nur der IMAP-Fallback sucht."""
+    _account(request, account)
+    index = request.app.state.search
+    return {"indexed": index.count(account), "ready": index.is_ready(account)}

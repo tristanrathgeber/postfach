@@ -168,6 +168,10 @@ export const api = {
   /** GET /api/status — Watcher-Verbindungsstatus je Konto. */
   status: (): Promise<{ accounts: Record<string, AccountStatus> }> => request('/status'),
 
+  /** GET /api/search/status — 0 = schnelle Suche noch nicht aufgebaut. */
+  searchStatus: (account: string): Promise<{ indexed: number; ready: boolean }> =>
+    request(`/search/status?account=${enc(account)}`),
+
   /** GET /api/categories — alle konfigurierten Kategorien. */
   categories: (): Promise<string[]> => request('/categories'),
 

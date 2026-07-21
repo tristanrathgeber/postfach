@@ -17,6 +17,16 @@ EMILIA_GUARD = (
 
 _INDEX_SKIP = {"gelöscht", "geloescht", "trash", "papierkorb", "spamverdacht", "spam", "junk", "outbox"}
 
+
+def iter_index_folders(mailbox):
+    """Ordner, die ein Voll-Scan besucht (Papierkorb/Spam/Outbox bleiben außen
+    vor) — geteilt zwischen Emilia-Gedächtnis und Such-Index."""
+    for folder in mailbox.list_folders():
+        leaf = folder.split("/")[-1].split(".")[-1].lower()
+        if folder.lower() in _INDEX_SKIP or leaf in _INDEX_SKIP:
+            continue
+        yield folder
+
 _SYSTEM_CHAT_TEMPLATE = (
     "Du bist Emilia, die persönliche Mail-Assistentin von {owner}. Du läufst lokal auf dem "
     "Rechner. Antworte knapp, freundlich und auf Deutsch. Stütze dich auf die mitgelieferten "
@@ -44,9 +54,6 @@ class EmiliaService:
         self._owner = owner or "dem Postfach-Inhaber"
 
     # --- Gedächtnis ---
-
-    def index_folder(self, account: str, mailbox, folder: str, limit: int = 10000, owner_addr: str = "") -> int:
-        return self.index_mails(account, folder, mailbox.list_messages(folder, limit), owner_addr)
 
     def index_mails(self, account: str, folder: str, mails: list, owner_addr: str = "") -> int:
         """Kern ohne IMAP-Fetch — der Watcher-Hook hat die Mails schon geladen."""
@@ -76,11 +83,9 @@ class EmiliaService:
 
     def index(self, account: str, mailbox, owner_addr: str = "") -> int:
         total = 0
-        for folder in mailbox.list_folders():
-            leaf = folder.split("/")[-1].split(".")[-1].lower()
-            if folder.lower() in _INDEX_SKIP or leaf in _INDEX_SKIP:
-                continue
-            total += self.index_folder(account, mailbox, folder, owner_addr=owner_addr)
+        for folder in iter_index_folders(mailbox):
+            mails = mailbox.list_messages(folder, 10000)
+            total += self.index_mails(account, folder, mails, owner_addr=owner_addr)
         return total
 
     # --- Fähigkeiten ---

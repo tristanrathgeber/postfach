@@ -63,8 +63,9 @@ def test_noreply_variants_are_filtered(tmp_path):
 
 def test_owner_address_is_not_harvested(tmp_path):
     memory = _memory(tmp_path)
-    EmiliaService(None, memory).index_folder(
-        "demo", DemoMailbox(), "INBOX", owner_addr="alex@demo.example",
+    box = DemoMailbox()
+    EmiliaService(None, memory).index_mails(
+        "demo", "INBOX", box.list_messages("INBOX", 100), owner_addr="alex@demo.example",
     )
     addrs = [c["addr"] for c in memory.search_contacts("demo.example", limit=20)]
     assert "alex@demo.example" not in addrs

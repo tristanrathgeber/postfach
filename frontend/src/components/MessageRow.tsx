@@ -10,6 +10,8 @@ type MessageRowProps = {
   selected: boolean
   checked: boolean
   anyChecked: boolean
+  /** Suche liefert Treffer aus allen Ordnern — dann den Ordner zeigen. */
+  showFolder?: boolean
   onOpen: (msg: Summary) => void
   onArchive: (msg: Summary) => void
   onTrash: (msg: Summary) => void
@@ -49,6 +51,7 @@ export const MessageRow = memo(function MessageRow({
   selected,
   checked,
   anyChecked,
+  showFolder = false,
   onOpen,
   onArchive,
   onTrash,
@@ -102,6 +105,11 @@ export const MessageRow = memo(function MessageRow({
           {msg.from_name || msg.from_addr}
         </span>
         <span className="flex shrink-0 items-center gap-1.5 text-muted group-hover:invisible">
+          {showFolder && msg.folder !== 'INBOX' ? (
+            <span className="max-w-[110px] truncate rounded bg-[#F1EFEA] px-1 font-mono text-[9.5px]">
+              {msg.folder.split('/').at(-1)?.split('.').at(-1)}
+            </span>
+          ) : null}
           {msg.has_attachments ? <PaperclipIcon size={12} /> : null}
           <time className="font-mono text-[10.5px]">{formatListDate(msg.date)}</time>
         </span>

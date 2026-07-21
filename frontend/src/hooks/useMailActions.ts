@@ -60,6 +60,7 @@ export function useMailActions() {
       api.action(ref.account, ref.uid, { action: seen ? 'read' : 'unread', folder: ref.folder }),
     onMutate: async ({ ref, seen }) => {
       await qc.cancelQueries({ queryKey: ['messages', ref.account, ref.folder] })
+      await qc.cancelQueries({ queryKey: ['search', ref.account] })
       patchMessage(qc, ref, { seen })
     },
     onError: (e, { ref }) => {
@@ -85,6 +86,7 @@ export function useMailActions() {
       // würde die optimistisch entfernten Zeilen wiederbeleben.
       for (const g of groupByFolder(targets)) {
         await qc.cancelQueries({ queryKey: ['messages', g.account, g.folder] })
+        await qc.cancelQueries({ queryKey: ['search', g.account] })
       }
       const keys = new Set(targets.map(msgKey))
       const hit = (m: Summary) => keys.has(msgKey(m))
@@ -102,6 +104,7 @@ export function useMailActions() {
     onSuccess: ({ failed }, { targets, action }) => {
       for (const g of groupByFolder(targets)) {
         void qc.invalidateQueries({ queryKey: ['messages', g.account, g.folder], refetchType: 'none' })
+        void qc.invalidateQueries({ queryKey: ['search', g.account], refetchType: 'none' })
         // „Kein Spam" verschiebt IN die Inbox — deren Cache aktiv nachladen,
         // sonst fehlt die Mail dort bis zum nächsten Poll.
         if (action === 'unspam') void qc.invalidateQueries({ queryKey: ['messages', g.account, 'INBOX'] })

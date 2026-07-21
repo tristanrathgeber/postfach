@@ -129,13 +129,18 @@ class AiService:
 
     def cached_categories(self, account: str, folder: str, uids: list[int]) -> dict[int, str]:
         """Ein Cache-Read pro Request statt einem pro Mail-Zeile."""
+        many = self.cached_categories_many(account, [(folder, uid) for uid in uids])
+        return {uid: category for (_f, uid), category in many.items()}
+
+    def cached_categories_many(self, account: str, keys: list[tuple[str, int]]) -> dict[tuple[str, int], str]:
+        """Ordnerübergreifend (Suche): EIN Cache-Load für beliebige (folder, uid)-Paare."""
         with self._lock:
             cache = self._load_cache()
         result = {}
-        for uid in uids:
+        for folder, uid in keys:
             entry = cache.get(self._key(account, folder, uid))
             if entry:
-                result[uid] = entry["category"]
+                result[(folder, uid)] = entry["category"]
         return result
 
     def draft(self, mail: ParsedMail) -> str:

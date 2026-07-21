@@ -118,3 +118,19 @@ Verhalten:
 - Klassifikations-Overrides tragen `"source":"user"` im Cache und werden von
   der KI nie überschrieben.
 - SSE `GET /api/live` sendet zusätzlich `{"type":"status","account":string,"connected":bool}`.
+
+## Nachtrag v0.5 — Batch 3 „Lokale Volltextsuche" (eingefroren 2026-07-21)
+
+| Methode & Pfad | Request | Response |
+|---|---|---|
+| `GET /api/search?account=&q=&folder=` | unverändert | `[Summary]` — NEU: nach einem vollen Index-Lauf aus dem lokalen FTS5-Index, IMMER über ALLE Ordner des Kontos (Treffer tragen ihren echten `folder`; `folder=` wird auf diesem Pfad ignoriert). Ohne vollen Index → IMAP-Fallback im übergebenen Ordner (v0.4-Verhalten) |
+| `GET /api/search/status?account=` | — | `{"indexed": number, "ready": boolean}` — ready erst nach einem VOLLEN Index-Lauf (einzelne Live-Push-Zeilen zählen nicht) |
+
+Query-Operatoren in `q`: `von:` `an:` `betreff:` `vor:JJJJ-MM-TT` `nach:JJJJ-MM-TT`
+`hat:anhang` sowie `"exakte Phrase"`. Nutzertext wird als FTS-Literal gequotet
+(keine FTS-Syntax von außen). Ranking bm25 (Betreff > Absender/Empfänger > Body),
+Limit 50. `POST /api/emilia/index` befüllt zusätzlich den Such-Index;
+Move-Aktionen ENTFERNEN den Index-Eintrag (IMAP vergibt im Ziel neue UIDs —
+ein Umzug wäre ein toter Treffer); der nächste Index-Lauf nimmt die Mail neu
+auf und räumt extern Verschwundenes ab (Pruning). read/unread halten `seen`
+im Index aktuell.

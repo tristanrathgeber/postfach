@@ -13,6 +13,8 @@ type MessageListProps = {
   listKey: string
   selectedKey: string | null
   searchActive: boolean
+  /** false: der Volltext-Index fehlt noch — es wurde nur der Ordner durchsucht. */
+  searchIndexReady: boolean
   activeQuery: string
   searchInputRef: RefObject<HTMLInputElement>
   onSearchSubmit: (q: string) => void
@@ -68,6 +70,7 @@ export function MessageList({
   listKey,
   selectedKey,
   searchActive,
+  searchIndexReady,
   activeQuery,
   searchInputRef,
   onSearchSubmit,
@@ -128,7 +131,7 @@ export function MessageList({
                 else setDraft('')
               }
             }}
-            placeholder="Suchen …  ( / )"
+            placeholder="Suchen …  von: betreff: hat:anhang  ( / )"
             aria-label="Suchen"
             className="w-full rounded border border-hairline bg-paper py-1.5 pl-8 pr-3 text-[13px] placeholder:font-mono placeholder:text-[11px] placeholder:text-muted focus:border-tinte focus:outline-none"
           />
@@ -139,7 +142,9 @@ export function MessageList({
       {searchActive ? (
         <div className="flex items-center gap-2 border-b border-hairline bg-paper px-4 py-1.5">
           <span className="min-w-0 truncate font-mono text-[11px] text-muted">
-            Suche: „{activeQuery}“
+            {searchIndexReady
+              ? `Suche: „${activeQuery}“ · ganzes Konto · von: an: betreff: vor: nach: hat:anhang`
+              : `Suche: „${activeQuery}“ · nur dieser Ordner — der Volltext-Index entsteht beim nächsten Index-Lauf`}
           </span>
           <span className="flex-1" />
           <button
@@ -205,6 +210,7 @@ export function MessageList({
               selected={selectedKey === msgKey(m)}
               checked={checked.has(msgKey(m))}
               anyChecked={checked.size > 0}
+              showFolder={searchActive}
               onOpen={onOpen}
               onArchive={onArchive}
               onTrash={onTrash}

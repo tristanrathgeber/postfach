@@ -60,6 +60,10 @@ def create_app(root: Path | None = None, demo: bool | None = None, mailbox_facto
     app.state.drafts = DraftStore(store_dir / "drafts.json")
     app.state.snippets = SnippetStore(store_dir / "snippets.json")
 
+    from .search import SearchIndex
+
+    app.state.search = SearchIndex(store_dir / "search.db")
+
     if demo:
         app.state.accounts = {_DEMO_ACCOUNT.name: _DEMO_ACCOUNT}
         app.state.demo_mailbox = DemoMailbox()
@@ -144,6 +148,7 @@ def create_app(root: Path | None = None, demo: bool | None = None, mailbox_facto
                 with open_mailbox(account) as box:
                     mails = box.list_messages("INBOX", 10)
                 app.state.emilia.index_mails(account_name, "INBOX", mails, owner_addr=account.address)
+                app.state.search.add_mails(account_name, "INBOX", mails)
                 with notify_lock:
                     last = notified_uid.get(account_name)
                     if last is None:

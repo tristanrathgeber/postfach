@@ -29,10 +29,10 @@ Leitplanken (gelten für jeden Batch):
 - [x] **Verbindungsstatus sichtbar** (Punkt + „getrennt seit HH:MM" in der Sidebar, SSE-Status-Events, /api/status)
 - [x] **Sortier-Automatik scharf** (launchd alle 30 Min, --no-drafts; Log unter ~/Library/Logs/postfach-email-agent.log)
 
-## Batch 3 — Lokale Volltextsuche (Leuchtturm, groß)
-- [ ] SQLite-FTS5-Index über den kompletten lokalen Bestand, Ziel **< 50 ms über 100k Mails**
-- [ ] Exakte Phrasen, Umlaute/Unicode korrekt, Operatoren (von:, an:, betreff:, vor:/nach:, hat:anhang)
-- [ ] Immer aktuell über den Push-Hook; IMAP-SEARCH nur noch Fallback
+## Batch 3 — Lokale Volltextsuche (Leuchtturm, groß) ✅ 2026-07-21
+- [x] SQLite-FTS5-Index über den kompletten Bestand — real gemessen: **3–13 ms über 6,4k Mails** (End-to-End inkl. HTTP)
+- [x] Exakte Phrasen, Umlaute korrekt (remove_diacritics: „muller" findet „Müller"), Operatoren von:/an:/betreff:/vor:/nach:/hat:anhang; Nutzertext ist nie FTS-Syntax
+- [x] Suche über ALLE Ordner des Kontos (Treffer zeigen ihren Ordner); live über den Push-Hook, Move-Aktionen räumen Einträge, Voll-Lauf prunt; IMAP-SEARCH nur noch Fallback vor dem ersten Index
 - [ ] Begründung: Suche ist laut Recherche der #1-Wechselgrund; local-first kann hier strukturell gewinnen
 
 ## Batch 4 — Konversations-Threads (groß)

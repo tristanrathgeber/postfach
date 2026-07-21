@@ -23,7 +23,7 @@ import { MessageList } from './components/MessageList'
 import { DraftsList } from './components/DraftsList'
 import { Reader } from './components/Reader'
 import { Composer, type ComposerState } from './components/Composer'
-import { useSettings, useSnippets } from './hooks/useLocalStores'
+import { useSearchReady, useSettings, useSnippets } from './hooks/useLocalStores'
 import { CommandPalette, type PaletteAction } from './components/CommandPalette'
 import { EmiliaPanel } from './components/EmiliaPanel'
 import { SettingsModal } from './components/SettingsModal'
@@ -121,6 +121,7 @@ function Postfach() {
   const searchAgg = useSearchAggregate(accountNames, searchActive ? view.query : '', folder)
   const foldersQuery = useFolders(accountSel === ALL_ACCOUNTS ? null : accountSel)
   const draftsAgg = useDraftsAggregate(accountNames)
+  const searchIndexReady = useSearchReady(accountNames, searchActive)
   const snippetsQuery = useSnippets()
   const settingsQuery = useSettings()
   const actions = useMailActions()
@@ -182,6 +183,7 @@ function Postfach() {
   if (prevViewIdentRef.current !== viewIdent) {
     prevViewIdentRef.current = viewIdent
     if (checked.size > 0) setChecked(new Set())
+    checkedMsgsRef.current.clear()
     checkAnchorRef.current = null
   }
 
@@ -226,19 +228,25 @@ function Postfach() {
   const { mutate: bulkMutate } = actions.bulk
   const runBulk = useCallback(
     (action: BatchAction) => {
-      // Spam-Richtung wird HIER aufgelöst — Taste und Toolbar-Button teilen sie.
-      const resolved = action === 'spam' && inSpamView ? 'unspam' : action
       const targets = [...checkedMsgsRef.current.values()]
       if (targets.length === 0) return
-      bulkMutate({ targets, action: resolved })
-      if (resolved !== 'read' && resolved !== 'unread') {
+      if (action === 'spam') {
+        // Richtung PRO Treffer: die Suche mischt Ordner (Spam + Inbox).
+        const spamHits = targets.filter((m) => isSpamFolder(m.folder))
+        const rest = targets.filter((m) => !isSpamFolder(m.folder))
+        if (spamHits.length > 0) bulkMutate({ targets: spamHits, action: 'unspam' })
+        if (rest.length > 0) bulkMutate({ targets: rest, action: 'spam' })
+      } else {
+        bulkMutate({ targets, action })
+      }
+      if (action !== 'read' && action !== 'unread') {
         const keys = new Set(targets.map(msgKey))
         setOpened((cur) => (cur && keys.has(msgKey(cur)) ? null : cur))
         setSelectedKey((cur) => (cur && keys.has(cur) ? null : cur))
       }
       clearChecked()
     },
-    [inSpamView, bulkMutate, clearChecked],
+    [bulkMutate, clearChecked],
   )
 
   // --- Aktionen ---
@@ -638,6 +646,7 @@ function Postfach() {
             listKey={`${viewKey(view)}|${accountSel}`}
             selectedKey={selectedKey}
             searchActive={searchActive}
+            searchIndexReady={searchIndexReady}
             activeQuery={view.kind === 'search' ? view.query : ''}
             searchInputRef={searchInputRef}
             onSearchSubmit={submitSearch}
