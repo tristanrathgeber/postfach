@@ -41,6 +41,7 @@ import { timePresets } from './lib/times'
 import { CommandPalette, type PaletteAction } from './components/CommandPalette'
 import { EmiliaPanel } from './components/EmiliaPanel'
 import { SettingsModal } from './components/SettingsModal'
+import { AddAccountDialog } from './components/AddAccountDialog'
 import { SparklesIcon } from './components/Icons'
 import { ToastProvider, useToast } from './components/Toast'
 
@@ -97,6 +98,7 @@ function Postfach() {
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [emiliaOpen, setEmiliaOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [addAccountOpen, setAddAccountOpen] = useState(false)
   // "Bilder laden" gilt nur für genau eine Nachricht (msgKey)
   const [imagesFor, setImagesFor] = useState<string | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -752,6 +754,7 @@ function Postfach() {
             folders={foldersQuery.data ?? []}
             status={statusQuery.data?.accounts ?? {}}
             onOpenSettings={() => setSettingsOpen(true)}
+            onAddAccount={() => setAddAccountOpen(true)}
           />
         }
         list={
@@ -882,6 +885,7 @@ function Postfach() {
         />
       ) : null}
       {settingsOpen ? <SettingsModal accounts={accounts} onClose={() => setSettingsOpen(false)} /> : null}
+      {addAccountOpen ? <AddAccountDialog onClose={() => setAddAccountOpen(false)} /> : null}
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} actions={paletteActions} onSearch={submitSearch} />
     </>
   )

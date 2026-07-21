@@ -13,6 +13,7 @@ import { EntityChips } from './EntityChips'
 import { useToast } from './Toast'
 import { AlertIcon, ArchiveIcon, ClockIcon, DownloadIcon, ForwardIcon, MailIcon, MailOpenIcon, PaperclipIcon, ReplyIcon, SparklesIcon, SpinnerIcon, TrashIcon } from './Icons'
 import type { InviteResponse } from '../lib/types'
+import { recordMouseAction } from '../lib/shortcutTeach'
 
 type ReaderProps = {
   opened: MsgRef | null
@@ -182,6 +183,12 @@ function ThreadRail({
 
 export function Reader({ opened, imagesEnabled, onEnableImages, onReply, onForward, onArchive, onTrash, onToggleSeen, onToggleSpam, onSnooze, categories, onChangeCategory, onOpenThreadMail, aiEnabled = true, onThreadAction }: ReaderProps) {
   const { showToast } = useToast()
+  // Behutsames Shortcut-Teaching: nur bei Maus-Klicks (nicht den Tastatur-
+  // Handlern), höchstens einmal je Aktion.
+  const teach = (action: string) => {
+    const hint = recordMouseAction(action)
+    if (hint) showToast(hint)
+  }
   const [snoozeOpen, setSnoozeOpen] = useState(false)
   useEffect(() => setSnoozeOpen(false), [opened])
   // RSVP-Antwort merken (pro geöffneter Mail), damit die Karte nach dem Senden
@@ -302,20 +309,20 @@ export function Reader({ opened, imagesEnabled, onEnableImages, onReply, onForwa
 
             {/* Aktionsleiste */}
             <div className="mt-4 flex flex-wrap items-center gap-2">
-              <ActionButton label="Antworten" hint="r" onClick={() => onReply(detail)}>
+              <ActionButton label="Antworten" hint="r" onClick={() => { teach('reply'); onReply(detail) }}>
                 <ReplyIcon size={13} />
               </ActionButton>
-              <ActionButton label="Weiterleiten" hint="f" onClick={() => onForward(detail)}>
+              <ActionButton label="Weiterleiten" hint="f" onClick={() => { teach('forward'); onForward(detail) }}>
                 <ForwardIcon size={13} />
               </ActionButton>
-              <ActionButton label="Archivieren" hint="e" onClick={() => onArchive(detail)}>
+              <ActionButton label="Archivieren" hint="e" onClick={() => { teach('archive'); onArchive(detail) }}>
                 <ArchiveIcon size={13} />
               </ActionButton>
-              <ActionButton label="Papierkorb" hint="#" onClick={() => onTrash(detail)}>
+              <ActionButton label="Papierkorb" hint="#" onClick={() => { teach('trash'); onTrash(detail) }}>
                 <TrashIcon size={13} />
               </ActionButton>
               <div className="relative">
-                <ActionButton label="Später" hint="z" onClick={() => setSnoozeOpen((v) => !v)}>
+                <ActionButton label="Später" hint="z" onClick={() => { teach('later'); setSnoozeOpen((v) => !v) }}>
                   <ClockIcon size={13} />
                 </ActionButton>
                 {snoozeOpen ? (
@@ -337,7 +344,7 @@ export function Reader({ opened, imagesEnabled, onEnableImages, onReply, onForwa
               >
                 <AlertIcon size={13} />
               </ActionButton>
-              <ActionButton label={detail.seen ? 'Ungelesen' : 'Gelesen'} hint="u" onClick={() => onToggleSeen(detail)}>
+              <ActionButton label={detail.seen ? 'Ungelesen' : 'Gelesen'} hint="u" onClick={() => { teach('seen'); onToggleSeen(detail) }}>
                 {detail.seen ? <MailIcon size={13} /> : <MailOpenIcon size={13} />}
               </ActionButton>
               <ActionButton

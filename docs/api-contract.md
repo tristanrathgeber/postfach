@@ -212,3 +212,19 @@ organizer_email, method, uid}` (start/end ISO-8601 oder Datum bei all_day).
 nur bei Sendungsnummern (Anbieter-Tracking, Host-Allowlist).
 RSVP läuft über den normalen Versandpfad (Nutzer-Klick, Sent-Ablage);
 `text/calendar; method=REPLY` mit echtem ATTENDEE-PARTSTAT.
+
+## Nachtrag v0.11 — Batch 9 „Onboarding & deutsche Provider" (eingefroren 2026-07-21)
+
+| Methode & Pfad | Request | Response |
+|---|---|---|
+| `GET /api/providers` | — | `[{"id","label","imap_host","imap_port","smtp_host","smtp_port","note"}]` (id `custom` = manuell) |
+| `POST /api/accounts/test` | `{provider,address,imap_host,imap_port,smtp_host,smtp_port,password}` | `{ok, imap:bool, smtp:bool, error?}` bzw. `{ok:true, demo:true}` |
+| `POST /api/accounts` | Test-Body + `{name, sent_folder?}` | `{ok:true, watcher_pending:true}`; 409 bei Namenskonflikt |
+| `DELETE /api/accounts/{name}` | — | `{ok:true}`; 409 wenn config.yaml-Konto (schreibgeschützt); 404 unbekannt |
+| `GET /api/folder-map?account=` | — | `{categories:[…], folders:[…], mapping:{cat:folder}}` |
+| `PUT /api/folder-map` | `{mapping:{cat:folder}}` | `{ok:true}` |
+
+Passwort NUR im macOS-Schlüsselbund (Service `postfach`, Username = Kontoname),
+nie in config.yaml/JSON/Index/Log. Auflösung: Env-Variable → Schlüsselbund.
+UI-Konten in `data/accounts.json` (verwaltet); `config.yaml` bleibt unberührt.
+`GET /api/accounts` liefert zusätzlich `"managed":bool` je Konto.

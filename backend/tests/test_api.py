@@ -19,8 +19,9 @@ def client(tmp_path):
 
 def test_accounts_contract(client):
     [account] = client.get("/api/accounts").json()
-    assert set(account) == {"name", "address", "provider"}
+    assert set(account) == {"name", "address", "provider", "managed"}
     assert account["name"] == "demo"
+    assert account["managed"] is False  # Demo-Konto stammt nicht aus accounts.json
 
 
 def test_messages_list_contract_and_order(client):

@@ -7,6 +7,8 @@ import { useSettings, useSnippets } from '../hooks/useLocalStores'
 import type { Account, Snippet } from '../lib/types'
 import { useToast } from './Toast'
 import { SpinnerIcon, XIcon } from './Icons'
+import { FolderMapSection } from './FolderMapSection'
+import { AccountsSection } from './AccountsSection'
 
 type SettingsModalProps = {
   accounts: Account[]
@@ -246,6 +248,10 @@ function SettingsForm({
             KI aktiviert
           </label>
         </section>
+
+        {/* Konten (verwaltete löschbar) + Ordner-Zuordnung */}
+        <AccountsSection accounts={accounts} />
+        <FolderMapSection account={accounts[0]?.name ?? null} />
 
         {/* Snippets */}
         <section>

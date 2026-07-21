@@ -1,6 +1,6 @@
 // Typen exakt nach docs/api-contract.md (v0.1, eingefroren).
 
-export type Account = { name: string; address: string; provider: 'imap' | 'gmail' }
+export type Account = { name: string; address: string; provider: 'imap' | 'gmail'; managed?: boolean }
 
 export type Summary = {
   account: string
@@ -54,6 +54,38 @@ export type Invite = {
 }
 
 export type InviteResponse = 'accepted' | 'tentative' | 'declined'
+
+// --- Batch 9: Onboarding (Nachtrag v0.11) ---
+
+export type Provider = {
+  id: string
+  label: string
+  imap_host: string
+  imap_port: number
+  smtp_host: string
+  smtp_port: number
+  note: string
+}
+
+export type AccountTest = {
+  provider: string
+  address: string
+  imap_host: string
+  imap_port: number
+  smtp_host: string
+  smtp_port: number
+  password: string
+}
+
+export type AccountTestResult =
+  | { ok: boolean; imap: boolean; smtp: boolean; error: string | null }
+  | { ok: true; demo: true }
+
+export type FolderMap = {
+  categories: string[]
+  folders: string[]
+  mapping: Record<string, string>
+}
 
 /** Lokal extrahierter Chip. url nur bei Sendungsnummern (Anbieter-Tracking). */
 export type Entity = {

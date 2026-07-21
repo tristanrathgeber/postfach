@@ -53,6 +53,17 @@ def create_app(root: Path | None = None, demo: bool | None = None, mailbox_facto
     from .stores import DraftStore, ScreenerStore, SettingsStore, SnippetStore, SubscriptionStore
 
     app = FastAPI(title="Postfach", version="0.3.0")
+
+    # Validierungsfehler NIE mit dem eingesendeten Body zurückspiegeln —
+    # Pydantic v2 legt den ganzen Body (inkl. Klartext-Passwort!) ins `input`.
+    from fastapi.exceptions import RequestValidationError
+    from fastapi.responses import JSONResponse
+
+    @app.exception_handler(RequestValidationError)
+    async def _redact_validation(request, exc):
+        redacted = [{k: v for k, v in err.items() if k != "input"} for err in exc.errors()]
+        return JSONResponse(status_code=422, content={"detail": redacted})
+
     app.state.config = cfg
     app.state.demo = demo
     app.state.live = LiveState()
@@ -64,6 +75,12 @@ def create_app(root: Path | None = None, demo: bool | None = None, mailbox_facto
     app.state.snippets = SnippetStore(store_dir / "snippets.json")
     app.state.subscriptions = SubscriptionStore(store_dir / "subscriptions.json")
     app.state.screener = ScreenerStore(store_dir / "screener.json")
+
+    from .accounts_store import AccountStore
+    from .folder_map import FolderMap
+
+    app.state.accounts_store = AccountStore(store_dir / "accounts.json")
+    app.state.folder_map = FolderMap(store_dir / "folder_map.json")
 
     from .search import SearchIndex
 
@@ -108,10 +125,12 @@ def create_app(root: Path | None = None, demo: bool | None = None, mailbox_facto
         )
         app.state.emilia = EmiliaService(local_llm, app.state.emilia_memory, owner=cfg.agent.owner_name)
 
+        from .credentials import resolve_password
+
         def default_factory(account: MailAccount) -> Mailbox:
-            password = os.environ.get(account.password_env, "").strip()
+            password = resolve_password(account)
             if not password:
-                raise OSError(f"Env-Variable {account.password_env} fehlt (.env)")
+                raise OSError(f"Kein Passwort für „{account.name}“ (weder .env noch Schlüsselbund)")
             return Mailbox.connect(
                 host=account.imap_host, port=account.imap_port,
                 address=account.address, password=password,
@@ -134,8 +153,7 @@ def create_app(root: Path | None = None, demo: bool | None = None, mailbox_facto
         from .mail_send import send_mail
 
         def smtp_send(account: MailAccount, mime_bytes: bytes) -> None:
-            password = os.environ.get(account.password_env, "").strip()
-            send_mail(account, password, mime_bytes)
+            send_mail(account, resolve_password(account), mime_bytes)
 
         app.state.smtp_send = smtp_send
 
@@ -198,6 +216,30 @@ def create_app(root: Path | None = None, demo: bool | None = None, mailbox_facto
                 start_watcher_thread(
                     account.name, _watch_connect_for(account), app.state.live, _index_new_mail
                 )
+
+    # Verwaltete (per UI eingerichtete) Konten dazumischen — die hand-editierte
+    # config.yaml bleibt unberührt. Namen aus config.yaml haben Vorrang.
+    def managed_account(entry: dict) -> MailAccount:
+        return MailAccount(
+            name=entry["name"], provider=entry.get("provider", "imap"),
+            address=entry["address"], password_env="",  # Passwort im Schlüsselbund
+            imap_host=entry.get("imap_host", ""), imap_port=int(entry.get("imap_port") or 993),
+            smtp_host=entry.get("smtp_host", ""), smtp_port=int(entry.get("smtp_port") or 587),
+            sent_folder=entry.get("sent_folder"),
+        )
+
+    def reload_managed_accounts() -> None:
+        for entry in app.state.accounts_store.list():
+            if entry["name"] not in app.state.accounts:
+                app.state.accounts[entry["name"]] = managed_account(entry)
+
+    app.state.managed_account = managed_account
+    app.state.reload_managed_accounts = reload_managed_accounts
+    # Konten, die VOR dem Merge da sind, stammen aus config.yaml/Demo und sind
+    # schreibgeschützt — auch wenn accounts.json später einen gleichnamigen
+    # Eintrag beschattet (Löschen würde sonst deren Keychain-Secret entfernen).
+    app.state.config_account_names = set(app.state.accounts)
+    reload_managed_accounts()
 
     # --- Zeit-Warteschlange: Undo/Später-Sends, Snooze-Aufwachen, Follow-ups ---
     from .api import SendBody, perform_send

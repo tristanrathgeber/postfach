@@ -26,6 +26,7 @@ type SidebarProps = {
   /** Watcher-Verbindungsstatus je Konto (leer, solange kein Watcher läuft — z. B. Demo). */
   status: Record<string, AccountStatus>
   onOpenSettings: () => void
+  onAddAccount: () => void
 }
 
 function NavRow({
@@ -168,6 +169,7 @@ export function Sidebar({
   folders,
   status,
   onOpenSettings,
+  onAddAccount,
 }: SidebarProps) {
   // Standardmäßig AUSGEKLAPPT — der eingeklappte Mini-Schalter war in der
   // Praxis nicht auffindbar (Nutzer-Feedback).
@@ -225,6 +227,13 @@ export function Sidebar({
             ) : null}
           </button>
         ))}
+        <button
+          type="button"
+          onClick={onAddAccount}
+          className="mt-0.5 w-full rounded px-2 py-[5px] text-left text-[12.5px] text-muted transition hover:bg-[#F1EFEA] hover:text-tinte"
+        >
+          + Konto hinzufügen
+        </button>
       </div>
 
       <div className="mx-4 my-2 border-t border-hairline" />

@@ -77,11 +77,14 @@ Leitplanken (gelten für jeden Batch):
 - [x] Struktur-Extraktion lokal: Termine, Beträge, Tracking-Nummern als klickbare Chips
   - extract.py: regelbasiert (kein LLM), possessive Regex + 10k-Cap gegen ReDoS; Sendungsnummern UPS/DHL/Hermes/DPD → Anbieter-Tracking (Host-Allowlist); Chips im Reader (Kopieren / Tracking-Link). Real: „11,88 €" auf Hetzner-Rechnung erkannt
 
-## Batch 9 — Onboarding & deutsche Provider
-- [ ] **Konto-Einrichtung per UI** (Formular statt YAML), Passwörter in den macOS-Schlüsselbund
-- [ ] **Provider-Presets**: GMX, web.de, T-Online, Posteo, mailbox.org, Freenet („GMX ohne Werbung"-Wedge)
-- [ ] Ordner-Mapping-Assistent (bestehende Ordner ↔ Kategorien)
-- [ ] Progressives Shortcut-Teaching (Superhuman-Learning: Aktivierung entscheidet)
+## Batch 9 — Onboarding & deutsche Provider ✅ (2026-07-21)
+- [x] **Konto-Einrichtung per UI** (Formular statt YAML), Passwörter in den macOS-Schlüsselbund
+  - credentials.py: resolve_password (Env→Schlüsselbund, kein Fallback bei deklariertem password_env); accounts_store.py (data/accounts.json, nie ein Passwortfeld); config.yaml unberührt; AddAccountDialog (testen→speichern), config_account_names schützt config-Konten vor Löschung; Demo fasst den echten Schlüsselbund nie an; 422-Handler redigiert Passwörter
+- [x] **Provider-Presets**: GMX, web.de, T-Online, Posteo, mailbox.org, Freenet, Gmail, iCloud, manuell (SMTP-Host ≠ IMAP-Host bei GMX/web.de!)
+- [x] Ordner-Mapping-Assistent (bestehende Ordner ↔ Kategorien)
+  - folder_map.py-Overlay über agent_config.folder_for; Einstellungen-Sektion je Kategorie ein Ziel-Ordner (real: 12 Kategorien × 18 GMX-Ordner)
+- [x] Progressives Shortcut-Teaching (Superhuman-Learning: Aktivierung entscheidet)
+  - lib/shortcutTeach.ts: 3× Maus-Wiederholung → EIN Tastatur-Tipp, danach nie wieder (localStorage); nur an Maus-Klicks, nicht an Tastatur-Handlern
 
 ## Batch 10 — App-Reife & Vertrieb
 - [ ] **Echtes Binary** (PyInstaller): korrektes Dock-Icon, keine uv/Node-Voraussetzung

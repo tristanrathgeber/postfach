@@ -14,6 +14,10 @@ import type {
   NlSearchResult,
   ThreadSummary,
   InviteResponse,
+  Provider,
+  AccountTest,
+  AccountTestResult,
+  FolderMap,
   ThreadMail,
   Account,
   Classification,
@@ -326,4 +330,25 @@ export const api = {
   /** GET /api/messages/{account}/{uid}/export — Mail als Obsidian-Markdown. */
   exportMarkdown: (account: string, uid: number, folder = 'INBOX'): Promise<{ filename: string; markdown: string }> =>
     request(`/messages/${enc(account)}/${enc(String(uid))}/export?folder=${enc(folder)}`),
+
+  // --- Batch 9: Onboarding (Nachtrag v0.11) ---
+
+  /** GET /api/providers — Preset-Liste (Host/Port je Anbieter). */
+  providers: (): Promise<Provider[]> => request('/providers'),
+
+  /** POST /api/accounts/test — IMAP+SMTP prüfen, nichts speichern. */
+  accountTest: (body: AccountTest): Promise<AccountTestResult> => post('/accounts/test', body),
+
+  /** POST /api/accounts — Konto speichern (Passwort → Schlüsselbund). */
+  accountAdd: (body: AccountTest & { name: string; sent_folder?: string | null }): Promise<{ ok: true; watcher_pending: boolean }> =>
+    post('/accounts', body),
+
+  /** DELETE /api/accounts/{name} — verwaltetes Konto entfernen. */
+  accountDelete: (name: string): Promise<{ ok: true }> => request(`/accounts/${enc(name)}`, { method: 'DELETE' }),
+
+  /** GET /api/folder-map?account= — Kategorien, Ordner, Zuordnung. */
+  folderMap: (account: string): Promise<FolderMap> => request(`/folder-map?account=${enc(account)}`),
+
+  /** PUT /api/folder-map — Kategorie→Ordner-Zuordnung speichern. */
+  putFolderMap: (mapping: Record<string, string>): Promise<{ ok: true }> => put('/folder-map', { mapping }),
 }

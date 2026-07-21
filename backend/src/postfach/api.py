@@ -112,6 +112,14 @@ def _mailbox_errors(fn):
     return wrapper
 
 
+def _archive_target(request: Request, box, agent_config, category: str | None) -> str:
+    """Archiv-Ziel: erst der Nutzer-Overlay (Ordner-Mapping-Assistent), dann
+    agent_config.folder_for (AI/<Kat>), sonst der Standard-Archivordner."""
+    if not category:
+        return box.archive_folder_default()
+    return request.app.state.folder_map.folder_for(category) or agent_config.folder_for(category)
+
+
 def _summary(account: str, folder: str, mail: ParsedMail, category: str | None) -> dict:
     snippet = truncate(re.sub(r"\s+", " ", mail.body_text).strip(), 120)
     return {
@@ -131,8 +139,10 @@ def _summary(account: str, folder: str, mail: ParsedMail, category: str | None) 
 
 @router.get("/accounts")
 def accounts(request: Request):
+    managed = request.app.state.accounts_store.names()
     return [
-        {"name": a.name, "address": a.address, "provider": a.provider}
+        {"name": a.name, "address": a.address, "provider": a.provider,
+         "managed": a.name in managed}
         for a in request.app.state.accounts.values()
     ]
 
@@ -285,8 +295,7 @@ def action(request: Request, account: str, uid: int, body: ActionBody):
             box.move(body.folder, uid, moved_to)
         elif body.action == "archive":
             category = request.app.state.ai.cached_categories(account, body.folder, [uid]).get(uid)
-            # folder_for: respektiert per-Kategorie-Ordner-Mapping (z. B. INBOX/Abos auf GMX).
-            moved_to = agent_config.folder_for(category) if category else box.archive_folder_default()
+            moved_to = _archive_target(request, box, agent_config, category)
             box.move(body.folder, uid, moved_to, ensure=True)
         elif body.action == "label":
             if not body.label:
@@ -353,7 +362,7 @@ def batch_action(request: Request, body: BatchActionBody):
             by_target: dict[str, list[int]] = {}
             for uid in uids:
                 category = categories.get(uid)
-                target = agent_config.folder_for(category) if category else box.archive_folder_default()
+                target = _archive_target(request, box, agent_config, category)
                 by_target.setdefault(target, []).append(uid)
             for target, group in by_target.items():
                 box.move_many(body.folder, group, target, ensure=True)
@@ -1105,3 +1114,130 @@ def export_markdown(request: Request, account: str, uid: int, folder: str = "INB
         raise HTTPException(404, f"Mail {uid} nicht gefunden")
     filename, markdown = to_markdown(mail)
     return {"filename": filename, "markdown": markdown}
+
+
+# --- Batch 9: Onboarding (Provider-Presets, Konten, Ordner-Mapping, v0.11) ---
+
+
+class AccountTestBody(BaseModel):
+    provider: str = "imap"
+    address: str
+    imap_host: str = ""
+    imap_port: int = 993
+    smtp_host: str = ""
+    smtp_port: int = 587
+    password: str
+
+
+class AccountAddBody(AccountTestBody):
+    name: str
+    sent_folder: str | None = None
+
+
+class FolderMapBody(BaseModel):
+    mapping: dict[str, str]
+
+
+@router.get("/providers")
+def providers(request: Request):
+    from .providers import preset_list
+
+    return preset_list()
+
+
+@router.post("/accounts/test")
+def account_test(request: Request, body: AccountTestBody):
+    """IMAP-Login + SMTP-Verbindung prüfen, NICHTS speichern. Im Demo-Modus
+    übersprungen (keine echten Server erreichbar)."""
+    import smtplib
+
+    from imapclient import IMAPClient
+
+    if request.app.state.demo:
+        return {"ok": True, "demo": True}
+    imap_ok = smtp_ok = False
+    error = None
+    try:
+        client = IMAPClient(body.imap_host, port=body.imap_port, ssl=True, timeout=30)
+        try:
+            client.login(body.address, body.password)
+            imap_ok = True
+        finally:
+            client.logout()
+        transport = smtplib.SMTP_SSL if body.smtp_port == 465 else smtplib.SMTP
+        with transport(body.smtp_host, body.smtp_port, timeout=30) as smtp:
+            if transport is smtplib.SMTP:
+                smtp.starttls()
+            smtp.login(body.address, body.password)
+            smtp_ok = True
+    except Exception as exc:  # Verbindungs-/Login-Fehler dem Nutzer zeigen (ohne Passwort!)
+        error = str(exc)
+    return {"ok": imap_ok and smtp_ok, "imap": imap_ok, "smtp": smtp_ok, "error": error}
+
+
+@router.post("/accounts")
+def account_add(request: Request, body: AccountAddBody):
+    """Konto speichern: Verbindungsdaten → accounts.json, Passwort →
+    Schlüsselbund, sofort les-/sendbar. Live-Push-Watcher ab dem Neustart."""
+    from .credentials import set_password
+
+    state = request.app.state
+    name = body.name.strip()
+    if not name or "@" not in body.address:
+        raise HTTPException(422, "Name und gültige E-Mail-Adresse nötig")
+    if body.provider == "imap" and not body.imap_host:
+        raise HTTPException(422, "IMAP-Host fehlt")
+    if name in state.accounts or name in state.accounts_store.names():
+        raise HTTPException(409, f"Konto „{name}“ existiert bereits")
+
+    entry = {
+        "name": name, "provider": body.provider, "address": body.address.strip(),
+        "imap_host": body.imap_host, "imap_port": body.imap_port,
+        "smtp_host": body.smtp_host or body.imap_host, "smtp_port": body.smtp_port,
+        "sent_folder": body.sent_folder,
+    }
+    # Im Demo den ECHTEN Schlüsselbund nie anfassen (öffentliche Demo) — die
+    # Demo-Mailbox braucht ohnehin kein Passwort.
+    if not state.demo:
+        set_password(name, body.password)  # NUR in den Schlüsselbund
+    state.accounts_store.add(entry)
+    state.accounts[name] = state.managed_account(entry)
+    return {"ok": True, "watcher_pending": True}
+
+
+@router.delete("/accounts/{name}")
+def account_delete(request: Request, name: str):
+    from .credentials import delete_password
+
+    state = request.app.state
+    # config.yaml-/Demo-Konten sind geschützt — auch wenn ein gleichnamiger
+    # accounts.json-Eintrag sie beschattet (sonst löschte ein Store-Schatten
+    # das config-Konto samt Keychain-Secret).
+    if name in state.config_account_names:
+        raise HTTPException(409, "Konto stammt aus config.yaml und ist hier schreibgeschützt")
+    if name not in state.accounts_store.names():
+        raise HTTPException(404, f"Unbekanntes Konto „{name}“")
+    state.accounts_store.remove(name)
+    if not state.demo:
+        delete_password(name)
+    state.accounts.pop(name, None)
+    return {"ok": True}
+
+
+@router.get("/folder-map")
+@_mailbox_errors
+def folder_map_get(request: Request, account: str):
+    acc = _account(request, account)
+    with request.app.state.open_mailbox(acc) as box:
+        folders = box.list_folders()
+    return {
+        "categories": sorted(request.app.state.config.agent.taxonomy),
+        "folders": folders,
+        "mapping": request.app.state.folder_map.mapping(),
+    }
+
+
+@router.put("/folder-map")
+def folder_map_put(request: Request, body: FolderMapBody):
+    request.app.state.folder_map.put(body.mapping)
+    return {"ok": True}
