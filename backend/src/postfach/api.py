@@ -715,6 +715,131 @@ def emilia_status(request: Request):
     }
 
 
+# --- Cookbook / Modell-Assistent: passendes lokales Modell finden & einrichten -
+
+
+class CookbookModelBody(BaseModel):
+    model: str
+
+
+def _ollama_tags(base_url: str) -> tuple[bool, list[str]]:
+    """(erreichbar, installierte Modell-Tags). Kurzer Timeout — Ollama ist optional."""
+    try:
+        resp = httpx.get(f"{base_url.rstrip('/')}/api/tags", timeout=2.5)
+        resp.raise_for_status()
+        names = [m.get("name", "") for m in (resp.json().get("models") or [])]
+        return True, [n for n in names if n]
+    except (httpx.HTTPError, ValueError):
+        return False, []
+
+
+def _persist_emilia_model(config_path, model: str) -> None:
+    """Schreibt emilia.model nach config.yaml — andere Schlüssel bleiben unberührt."""
+    from pathlib import Path
+
+    import yaml
+
+    path = Path(config_path)
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else {}
+    data = data or {}
+    emilia = dict(data.get("emilia") or {})
+    emilia["model"] = model
+    data["emilia"] = emilia
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+
+
+@router.get("/cookbook")
+def cookbook_overview(request: Request):
+    """Systemscan + kuratierter Katalog: was läuft hier, was passt am besten zu
+    Postfach, was ist schon installiert."""
+    from . import cookbook as cb
+
+    cfg = request.app.state.config
+    reachable, installed = _ollama_tags(cfg.emilia.ollama_url)
+    system = cb.scan_system()
+    return {
+        "system": system,
+        "active_model": cfg.emilia.model,
+        "ollama_reachable": reachable,
+        "installed": installed,
+        "recommended": cb.recommend(system, installed),
+        "catalog": cb.annotate(system, installed),
+        "demo": request.app.state.demo,
+    }
+
+
+@router.post("/cookbook/pull")
+def cookbook_pull(request: Request, body: CookbookModelBody):
+    """Lädt ein Katalog-Modell über Ollama; streamt Fortschritt als NDJSON."""
+    from fastapi.responses import StreamingResponse
+    from starlette.background import BackgroundTask
+
+    from . import cookbook as cb
+
+    if request.app.state.demo:
+        raise HTTPException(403, "Im Demo deaktiviert — Modelle lädst du in der echten App.")
+    if cb.get_spec(body.model) is None:
+        raise HTTPException(400, "Unbekanntes Modell.")
+    base = request.app.state.config.emilia.ollama_url.rstrip("/")
+
+    def ndjson():
+        try:
+            with httpx.stream("POST", f"{base}/api/pull", json={"model": body.model}, timeout=None) as resp:
+                resp.raise_for_status()
+                for line in resp.iter_lines():
+                    if not line:
+                        continue
+                    try:
+                        ev = json.loads(line)
+                    except ValueError:
+                        continue
+                    if ev.get("error"):
+                        yield json.dumps({"error": ev["error"]}, ensure_ascii=False) + "\n"
+                        continue
+                    out = {"status": ev.get("status", "")}
+                    if isinstance(ev.get("total"), int) and isinstance(ev.get("completed"), int):
+                        out["total"] = ev["total"]
+                        out["completed"] = ev["completed"]
+                    yield json.dumps(out, ensure_ascii=False) + "\n"
+        except httpx.HTTPError as exc:
+            yield json.dumps({"error": f"Ollama nicht erreichbar: {exc}"}, ensure_ascii=False) + "\n"
+
+    generator = ndjson()
+    return StreamingResponse(
+        generator, media_type="application/x-ndjson", background=BackgroundTask(generator.close)
+    )
+
+
+@router.post("/cookbook/activate")
+def cookbook_activate(request: Request, body: CookbookModelBody):
+    """Macht ein installiertes Modell zu Emilias Modell — persistiert in
+    config.yaml UND schaltet die laufende Instanz sofort um (kein Neustart).
+    Damit ist es zugleich fürs Sortieren/Entwerfen aktiv, wenn die lokal laufen."""
+    import dataclasses
+
+    from . import cookbook as cb
+
+    state = request.app.state
+    if state.demo:
+        raise HTTPException(403, "Im Demo deaktiviert — aktivieren geht in der echten App.")
+    if cb.get_spec(body.model) is None:
+        raise HTTPException(400, "Unbekanntes Modell.")
+    reachable, installed = _ollama_tags(state.config.emilia.ollama_url)
+    if reachable and body.model not in installed:
+        raise HTTPException(409, "Modell ist noch nicht installiert — bitte zuerst herunterladen.")
+
+    _persist_emilia_model(state.config_path, body.model)
+    state.config = dataclasses.replace(
+        state.config, emilia=dataclasses.replace(state.config.emilia, model=body.model)
+    )
+    # Geteilte Ollama-Instanz umschalten → wirkt für Emilia und (falls lokal)
+    # Sortieren/Entwerfen zugleich.
+    if state.local_llm is not None:
+        state.local_llm._model = body.model
+    return {"ok": True, "active_model": body.model}
+
+
 # --- Batch 1: Einstellungen, Entwürfe, Snippets, Kontakte (lokale Stores) ---
 
 

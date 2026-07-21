@@ -293,3 +293,35 @@ export type NetworkInfo = {
   targets: NetworkTarget[]
   note: string
 }
+
+// --- Cookbook / Modell-Assistent (Nachtrag v0.13) ---
+
+export type CookbookSystem = { os: string; arch: string; chip: string; cores: number; ram_gb: number }
+
+export type CookbookModel = {
+  id: string
+  label: string
+  params: string
+  size_gb: number
+  min_ram_gb: number
+  role: string
+  strengths: string[]
+  note: string
+  fit: number
+  runs: boolean
+  installed: boolean
+  recommended: boolean
+}
+
+export type CookbookOverview = {
+  system: CookbookSystem
+  active_model: string
+  ollama_reachable: boolean
+  installed: string[]
+  recommended: string | null
+  catalog: CookbookModel[]
+  demo: boolean
+}
+
+/** NDJSON-Zeile von POST /api/cookbook/pull */
+export type PullProgress = { status?: string; total?: number; completed?: number; error?: string }

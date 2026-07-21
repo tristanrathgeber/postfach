@@ -74,6 +74,8 @@ def create_app(root: Path | None = None, demo: bool | None = None, mailbox_facto
         return JSONResponse(status_code=422, content={"detail": redacted})
 
     app.state.config = cfg
+    app.state.config_path = root / "config" / "config.yaml"
+    app.state.local_llm = None  # im Echtbetrieb gesetzt; Cookbook tauscht das Modell hier
     app.state.demo = demo
     app.state.live = LiveState()
     # Demo und Echtbetrieb teilen data/ — Demo-Spielstände strikt trennen,
@@ -121,6 +123,9 @@ def create_app(root: Path | None = None, demo: bool | None = None, mailbox_facto
         app.state.accounts = {a.name: a for a in cfg.accounts}
         # Emilia ist immer lokal; Sortieren/Entwürfe je nach Schalter lokal oder Claude.
         local_llm = OllamaBackend(model=cfg.emilia.model, base_url=cfg.emilia.ollama_url)
+        # Eine geteilte Instanz für Emilia UND (falls lokal) Sortieren/Entwerfen —
+        # das Cookbook kann so das Modell zur Laufzeit an EINER Stelle umschalten.
+        app.state.local_llm = local_llm
         cloud_llm = _llm_backend(cfg.agent)
         app.state.ai = AiService(
             cfg.agent,

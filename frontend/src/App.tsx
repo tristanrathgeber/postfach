@@ -44,6 +44,7 @@ import { EmiliaPanel } from './components/EmiliaPanel'
 import { SettingsModal } from './components/SettingsModal'
 import { AddAccountDialog } from './components/AddAccountDialog'
 import { AboutDialog } from './components/AboutDialog'
+import { CookbookModal } from './components/CookbookModal'
 import { SparklesIcon } from './components/Icons'
 import { ToastProvider, useToast } from './components/Toast'
 
@@ -102,6 +103,7 @@ function Postfach() {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [addAccountOpen, setAddAccountOpen] = useState(false)
   const [aboutOpen, setAboutOpen] = useState(false)
+  const [cookbookOpen, setCookbookOpen] = useState(false)
   // "Bilder laden" gilt nur für genau eine Nachricht (msgKey)
   const [imagesFor, setImagesFor] = useState<string | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -623,6 +625,13 @@ function Postfach() {
       run: () => setSettingsOpen(true),
     })
     list.push({
+      id: 'modell-assistent',
+      group: 'Aktionen',
+      label: 'Modell-Assistent',
+      keywords: ['cookbook', 'ki', 'modell', 'emilia', 'ollama', 'download', 'llm'],
+      run: () => setCookbookOpen(true),
+    })
+    list.push({
       id: 'ueber',
       group: 'Aktionen',
       label: 'Über Postfach',
@@ -927,6 +936,7 @@ function Postfach() {
       ) : null}
       {addAccountOpen ? <AddAccountDialog onClose={() => setAddAccountOpen(false)} /> : null}
       {aboutOpen ? <AboutDialog onClose={() => setAboutOpen(false)} /> : null}
+      {cookbookOpen ? <CookbookModal onClose={() => setCookbookOpen(false)} /> : null}
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} actions={paletteActions} onSearch={submitSearch} />
     </>
   )

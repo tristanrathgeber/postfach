@@ -20,6 +20,8 @@ import type {
   FolderMap,
   VersionInfo,
   NetworkInfo,
+  CookbookOverview,
+  PullProgress,
   ThreadMail,
   Account,
   Classification,
@@ -361,4 +363,73 @@ export const api = {
 
   /** GET /api/network-info — die einzigen ausgehenden Ziele der App. */
   networkInfo: (): Promise<NetworkInfo> => request('/network-info'),
+
+  // --- Cookbook / Modell-Assistent (Nachtrag v0.13) ---
+
+  /** GET /api/cookbook — Systemscan + kuratierter Katalog + Empfehlung. */
+  cookbook: (): Promise<CookbookOverview> => request('/cookbook'),
+
+  /** POST /api/cookbook/activate — macht ein installiertes Modell zu Emilias Modell. */
+  cookbookActivate: (model: string): Promise<{ ok: true; active_model: string }> =>
+    post('/cookbook/activate', { model }),
+
+  /**
+   * POST /api/cookbook/pull — NDJSON: {status,total?,completed?} je Zeile,
+   * {error} bei Abbruch. Ruft onEvent pro Zeile; wirft ApiError vor Stream-Beginn.
+   */
+  cookbookPull: async (
+    model: string,
+    onEvent: (e: PullProgress) => void,
+    signal?: AbortSignal,
+  ): Promise<void> => {
+    let res: Response
+    try {
+      res = await fetch(`${BASE}/cookbook/pull`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model }),
+        signal,
+      })
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') return
+      throw new ApiError(0, 'Backend nicht erreichbar')
+    }
+    if (!res.ok || !res.body) {
+      let detail = `Fehler ${res.status}`
+      try {
+        const data = (await res.json()) as { detail?: string }
+        if (typeof data.detail === 'string') detail = data.detail
+      } catch {
+        // Body war kein JSON — generische Meldung behalten.
+      }
+      throw new ApiError(res.status, detail)
+    }
+    const reader = res.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    const emit = (line: string) => {
+      try {
+        onEvent(JSON.parse(line) as PullProgress)
+      } catch {
+        // defekte Zeile überspringen
+      }
+    }
+    try {
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        let newline
+        while ((newline = buffer.indexOf('\n')) >= 0) {
+          const line = buffer.slice(0, newline).trim()
+          buffer = buffer.slice(newline + 1)
+          if (line) emit(line)
+        }
+      }
+      const rest = (buffer + decoder.decode()).trim()
+      if (rest) emit(rest)
+    } finally {
+      reader.cancel().catch(() => {})
+    }
+  },
 }
