@@ -22,6 +22,7 @@ postfach-app = "postfach.desktop:main"
 
 [project.optional-dependencies]
 desktop = ["pywebview>=5.0"]
+build = ["pywebview>=5.0", "pyinstaller>=6.0"]
 
 [tool.uv.sources]
 email-agent = { path = "../../email-agent", editable = true }

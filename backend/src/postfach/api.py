@@ -1241,3 +1241,73 @@ def folder_map_get(request: Request, account: str):
 def folder_map_put(request: Request, body: FolderMapBody):
     request.app.state.folder_map.put(body.mapping)
     return {"ok": True}
+
+
+# --- Batch 10: Version + Netzwerk-Transparenz (Contract v0.12) ---
+
+
+@router.get("/version")
+def version(request: Request, check: int = 0):
+    """Version + optionaler Update-Check (nur bei check=1, expliziter Klick)."""
+    from .version import version_info
+
+    return version_info(check=bool(check))
+
+
+@router.get("/network-info")
+def network_info(request: Request):
+    """ALLE ausgehenden Ziele der App — nachprüfbar, ehrlich. Belegt die
+    Zero-Telemetrie-Zusage und verschweigt insbesondere den Cloud-LLM nicht,
+    falls Sortieren/Entwerfen nicht lokal laufen."""
+    from urllib.parse import urlparse
+
+    state = request.app.state
+    cfg = state.config
+    targets: list[dict] = []
+    seen: set = set()
+
+    def add(host: str, port: int, why: str, cloud: bool = False):
+        key = (host, port)
+        if host and key not in seen:
+            seen.add(key)
+            targets.append({"host": host, "port": port, "why": why, "cloud": cloud})
+
+    accounts_out = []
+    for acc in state.accounts.values():
+        if acc.imap_host:
+            add(acc.imap_host, acc.imap_port, "IMAP — Mail empfangen (Push-Verbindung, solange die App läuft)")
+            accounts_out.append({"host": acc.imap_host, "port": acc.imap_port})
+        smtp_host = acc.smtp_host or acc.imap_host
+        if smtp_host:
+            add(smtp_host, acc.smtp_port, "SMTP — Mail senden (auf Klick)")
+
+    # Ollama (lokal) — Chat, Verbessern, Gedächtnis-Embeddings.
+    ollama = cfg.emilia.ollama_url
+    o = urlparse(ollama)
+    add(o.hostname or "localhost", o.port or 11434, "Ollama — lokale KI (Emilia, Sortieren/Entwerfen falls lokal)")
+
+    # Cloud-LLM NUR wenn Sortieren ODER Entwerfen nicht lokal ist — dann gehen
+    # Mail-Inhalte an den Anbieter. Im Demo ist die KI immer lokal (DemoAiService).
+    uses_cloud = not state.demo and not (cfg.emilia.sort_local and cfg.emilia.draft_local)
+    cloud_llm = None
+    if uses_cloud:
+        backend = cfg.agent.llm_backend
+        host = "api.anthropic.com" if backend == "claude" else backend
+        cloud_llm = {"backend": backend, "host": host,
+                     "why": "KI-Sortieren/-Entwürfe (Opt-in) — schickt Mail-Inhalte an den Anbieter"}
+        add(host, 443, cloud_llm["why"], cloud=True)
+
+    # GitHub — nur auf ausdrücklichen Update-Klick.
+    add("api.github.com", 443, "Update-Prüfung — NUR auf Klick im Über-Dialog")
+
+    note = ("Postfach spricht nur mit diesen Servern. Keine Telemetrie."
+            if not uses_cloud else
+            "Achtung: KI-Cloud ist aktiv — Mail-Inhalte gehen an den KI-Anbieter. "
+            "Für rein lokal: sort_local und draft_local aktivieren.")
+    return {
+        "accounts": accounts_out,   # Rückwärtskompatibel
+        "ollama": ollama,
+        "cloud_llm": cloud_llm,
+        "targets": targets,
+        "note": note,
+    }

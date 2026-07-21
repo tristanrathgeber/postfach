@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout postfach
+        uses: actions/checkout@v4
+        with:
+          path: postfach
+      # email-agent ist eine Nachbar-Path-Dependency (../../email-agent) — als
+      # Geschwister-Verzeichnis auschecken, damit uv sie aufloest.
+      - name: Checkout email-agent
+        uses: actions/checkout@v4
+        with:
+          repository: tristanrathgeber/email-agent
+          path: email-agent
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+      - name: Backend-Tests
+        working-directory: postfach/backend
+        run: |
+          uv sync
+          uv run pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Frontend pruefen
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run lint
+          npm test
+          npm run build

@@ -86,11 +86,15 @@ Leitplanken (gelten für jeden Batch):
 - [x] Progressives Shortcut-Teaching (Superhuman-Learning: Aktivierung entscheidet)
   - lib/shortcutTeach.ts: 3× Maus-Wiederholung → EIN Tastatur-Tipp, danach nie wieder (localStorage); nur an Maus-Klicks, nicht an Tastatur-Handlern
 
-## Batch 10 — App-Reife & Vertrieb
-- [ ] **Echtes Binary** (PyInstaller): korrektes Dock-Icon, keine uv/Node-Voraussetzung
-- [ ] **CI + Releases**: GitHub Actions (Tests, Build), fertige .app als Release-Download
-- [ ] Update-Hinweis in der App; Startzeit/Speicher messen und publizieren
-- [ ] Verifizierbare Privatheit: offener Netzwerk-Log, Null-Telemetrie-Statement, englisches README
+## Batch 10 — App-Reife & Vertrieb ✅ (2026-07-21)
+- [x] **Echtes Binary** (PyInstaller): korrektes Dock-Icon, keine uv/Node-Voraussetzung
+  - postfach.spec (bündelt postfach+email_agent+Frontend-dist+pyobjc); paths.py trennt resource_dir() (gebündelt) und user_data_root() (~/Library/Application Support/Postfach); Null-Konten-Start (Onboarding-UI übernimmt). Real: startet mit LEERER PATH, 0,51 s Kaltstart, 144 MB, 45 MB Bundle
+- [x] **CI + Releases**: GitHub Actions (Tests, Build), fertige .app als Release-Download
+  - ci.yml (Backend+Frontend, email-agent als Nachbar-Checkout), release.yml (Tag v* → .app bauen/zippen/Release)
+- [x] Update-Hinweis in der App; Startzeit/Speicher messen und publizieren
+  - /api/version (Update-Check NUR auf Klick, checked-Flag); Über-Dialog (⌘K); Messwerte im README/Report
+- [x] Verifizierbare Privatheit: offener Netzwerk-Log, Null-Telemetrie-Statement, englisches README
+  - /api/network-info listet ALLE ausgehenden Ziele (inkl. Cloud-LLM-Host, sobald sort_local/draft_local=false — kann nie lügen); Defaults jetzt lokal (kein Cloud-Call out-of-the-box); englisches README mit Zero-Telemetrie + Transparenz-Tabelle; test_no_telemetry_packages_imported
 
 ## Batch 11 — Design (bewusst zum Schluss)
 - [ ] **Dark Mode richtig**: Original-Mail im hellen Papier-Container, Smart-Darkening als Opt-in pro Mail/Absender, Bilder nie invertieren

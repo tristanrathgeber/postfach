@@ -36,8 +36,11 @@ class EmiliaConfig:
     model: str = "llama3.2"
     embed_model: str = "all-minilm:l6-v2"
     ollama_url: str = "http://localhost:11434"
-    sort_local: bool = False
-    draft_local: bool = False
+    # Local-First per Default: ein frisches Binary schickt NIE Mail-Inhalte in
+    # die Cloud. Claude ist ausdrückliches Opt-in (sort_local/draft_local: false
+    # in config.yaml). Sonst wäre die „no cloud"-Zusage von Anfang an falsch.
+    sort_local: bool = True
+    draft_local: bool = True
 
 
 @dataclass(frozen=True)

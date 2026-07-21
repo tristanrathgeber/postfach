@@ -23,6 +23,14 @@ export function AddAccountDialog({ onClose }: { onClose: () => void }) {
   const [smtpPort, setSmtpPort] = useState(587)
   const [testResult, setTestResult] = useState<AccountTestResult | null>(null)
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
   const preset = providers.find((p) => p.id === providerId)
   const isCustom = providerId === 'custom'
 

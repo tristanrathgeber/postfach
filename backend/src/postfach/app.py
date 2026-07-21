@@ -38,21 +38,30 @@ def _llm_backend(agent_config):
 
 
 def _root() -> Path:
-    return Path(os.environ.get("POSTFACH_ROOT") or Path(__file__).resolve().parents[3])
+    from .paths import user_data_root
+
+    return user_data_root()
 
 
 def create_app(root: Path | None = None, demo: bool | None = None, mailbox_factory=None) -> FastAPI:
-    root = Path(root) if root is not None else _root()
+    from .paths import is_frozen, resource_dir, user_data_root
+
+    # root = schreibbare config/data-Wurzel (Binary: Application Support).
+    root = Path(root) if root is not None else user_data_root()
     if demo is None:
         demo = os.environ.get("POSTFACH_DEMO") == "1"
 
     cfg = load_postfach_config(root / "config" / "config.yaml")
     data_dir = root / "data"
     style_path = root / "config" / "style_profile.md"
+    # Frontend: im Bundle aus den mitgebündelten Ressourcen, sonst aus root.
+    frontend_root = resource_dir() if is_frozen() else root
 
     from .stores import DraftStore, ScreenerStore, SettingsStore, SnippetStore, SubscriptionStore
 
-    app = FastAPI(title="Postfach", version="0.3.0")
+    from . import __version__
+
+    app = FastAPI(title="Postfach", version=__version__)
 
     # Validierungsfehler NIE mit dem eingesendeten Body zurückspiegeln —
     # Pydantic v2 legt den ganzen Body (inkl. Klartext-Passwort!) ins `input`.
@@ -326,7 +335,7 @@ def create_app(root: Path | None = None, demo: bool | None = None, mailbox_facto
             response.headers["Cache-Control"] = "no-cache"
         return response
 
-    dist = root / "frontend" / "dist"
+    dist = frontend_root / "frontend" / "dist"
     if dist.exists():
         app.mount("/", StaticFiles(directory=dist, html=True), name="frontend")
     return app
@@ -338,7 +347,7 @@ def main() -> None:
     from email_agent.cli import load_env
 
     root = _root()
-    load_env(root)
+    load_env(root)  # optionale .env aus der Nutzer-Wurzel (fehlt bei frischem Binary)
     uvicorn.run(create_app(root=root), host=HOST, port=PORT)
 
 

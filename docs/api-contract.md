@@ -228,3 +228,13 @@ Passwort NUR im macOS-Schlüsselbund (Service `postfach`, Username = Kontoname),
 nie in config.yaml/JSON/Index/Log. Auflösung: Env-Variable → Schlüsselbund.
 UI-Konten in `data/accounts.json` (verwaltet); `config.yaml` bleibt unberührt.
 `GET /api/accounts` liefert zusätzlich `"managed":bool` je Konto.
+
+## Nachtrag v0.12 — Batch 10 „App-Reife & Vertrieb" (eingefroren 2026-07-21)
+
+| Methode & Pfad | Request | Response |
+|---|---|---|
+| `GET /api/version` | optional `?check=1` | `{"version","update_available":bool,"latest"?}`; `latest`/Vergleich nur bei `check=1` (sonst kein Netz-Call) |
+| `GET /api/network-info` | — | `{"accounts":[{"host","port"}],"ollama":url,"note"}` — die einzigen ausgehenden Ziele |
+
+Privatheit: der Update-Check spricht NUR bei `?check=1` (expliziter Nutzer-Klick)
+mit GitHub; nie automatisch. Kein Telemetrie-/Analytics-Endpunkt existiert.

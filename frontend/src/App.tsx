@@ -42,6 +42,7 @@ import { CommandPalette, type PaletteAction } from './components/CommandPalette'
 import { EmiliaPanel } from './components/EmiliaPanel'
 import { SettingsModal } from './components/SettingsModal'
 import { AddAccountDialog } from './components/AddAccountDialog'
+import { AboutDialog } from './components/AboutDialog'
 import { SparklesIcon } from './components/Icons'
 import { ToastProvider, useToast } from './components/Toast'
 
@@ -99,6 +100,7 @@ function Postfach() {
   const [emiliaOpen, setEmiliaOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [addAccountOpen, setAddAccountOpen] = useState(false)
+  const [aboutOpen, setAboutOpen] = useState(false)
   // "Bilder laden" gilt nur für genau eine Nachricht (msgKey)
   const [imagesFor, setImagesFor] = useState<string | null>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -615,6 +617,13 @@ function Postfach() {
       keywords: ['signatur', 'snippets', 'settings'],
       run: () => setSettingsOpen(true),
     })
+    list.push({
+      id: 'ueber',
+      group: 'Aktionen',
+      label: 'Über Postfach',
+      keywords: ['about', 'version', 'privatheit', 'update', 'netzwerk'],
+      run: () => setAboutOpen(true),
+    })
 
     // Snippets an der Cursor-Position einfügen — nur sinnvoll bei offenem Composer.
     if (composer) {
@@ -886,6 +895,7 @@ function Postfach() {
       ) : null}
       {settingsOpen ? <SettingsModal accounts={accounts} onClose={() => setSettingsOpen(false)} /> : null}
       {addAccountOpen ? <AddAccountDialog onClose={() => setAddAccountOpen(false)} /> : null}
+      {aboutOpen ? <AboutDialog onClose={() => setAboutOpen(false)} /> : null}
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} actions={paletteActions} onSearch={submitSearch} />
     </>
   )

@@ -18,6 +18,8 @@ import type {
   AccountTest,
   AccountTestResult,
   FolderMap,
+  VersionInfo,
+  NetworkInfo,
   ThreadMail,
   Account,
   Classification,
@@ -351,4 +353,12 @@ export const api = {
 
   /** PUT /api/folder-map — Kategorie→Ordner-Zuordnung speichern. */
   putFolderMap: (mapping: Record<string, string>): Promise<{ ok: true }> => put('/folder-map', { mapping }),
+
+  // --- Batch 10: Version & Netzwerk-Transparenz (Nachtrag v0.12) ---
+
+  /** GET /api/version — mit check=true fragt es (nur dann) GitHub nach Updates. */
+  version: (check = false): Promise<VersionInfo> => request(`/version${check ? '?check=1' : ''}`),
+
+  /** GET /api/network-info — die einzigen ausgehenden Ziele der App. */
+  networkInfo: (): Promise<NetworkInfo> => request('/network-info'),
 }

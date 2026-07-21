@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build-app:
+    runs-on: macos-14
+    steps:
+      - name: Checkout postfach
+        uses: actions/checkout@v4
+        with:
+          path: postfach
+      - name: Checkout email-agent
+        uses: actions/checkout@v4
+        with:
+          repository: tristanrathgeber/email-agent
+          path: email-agent
+      - uses: astral-sh/setup-uv@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Postfach.app bauen (PyInstaller)
+        working-directory: postfach
+        run: ./scripts/build_app.sh
+      - name: App zippen
+        working-directory: postfach/dist
+        run: ditto -c -k --keepParent Postfach.app Postfach.app.zip
+      - name: GitHub-Release mit .app-Download
+        working-directory: postfach
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" dist/Postfach.app.zip \
+            --title "Postfach $TAG" \
+            --notes "Unsigniertes macOS-Binary. Beim ersten Start Rechtsklick -> Oeffnen. Kein uv/Node noetig."

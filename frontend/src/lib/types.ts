@@ -279,3 +279,17 @@ export type DraftUpsert = Omit<Draft, 'id' | 'updated'> & { id?: string }
 
 /** GET/PUT /api/snippets — Textbausteine, Auslösung ;kürzel+Tab bzw. ⌘K. */
 export type Snippet = { abbrev: string; title: string; text: string }
+
+// --- Batch 10: Version & Netzwerk-Transparenz (Nachtrag v0.12) ---
+
+export type VersionInfo = { version: string; update_available: boolean; latest?: string; checked?: boolean }
+
+export type NetworkTarget = { host: string; port: number; why: string; cloud: boolean }
+
+export type NetworkInfo = {
+  accounts: { host: string; port: number }[]
+  ollama: string
+  cloud_llm: { backend: string; host: string; why: string } | null
+  targets: NetworkTarget[]
+  note: string
+}

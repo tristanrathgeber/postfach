@@ -1,83 +1,122 @@
 # Postfach
 
-Eigene, lokale Mail-Anwendung im Stil von Notion Mail — für beliebige IMAP-Konten
-(selbst gehostet, GMX, Gmail, …). Läuft komplett auf deinem Rechner (`127.0.0.1:8722`).
+A local-first mail app in the spirit of Notion Mail — for any IMAP account
+(self-hosted, GMX, web.de, Gmail, …). Everything runs on your own Mac
+(`127.0.0.1:8722`). No account required to try it, **no telemetry**, and by
+default **no cloud** — the AI runs entirely on your machine via Ollama.
 
-- **AI-Views:** Mails werden per LLM kategorisiert (email-agent-Taxonomie) und als
-  Split-Inbox-Views angezeigt; Klassifikation wird gecacht.
-- **Sicher lesen:** HTML serverseitig sanitisiert (nh3) + sandboxed iframe; externe
-  Bilder standardmäßig blockiert („Bilder laden" auf Klick).
-- **Schreiben:** Antworten/Verfassen mit „AI-Entwurf" in deinem Schreibstil;
-  **gesendet wird ausschließlich, wenn du klickst** (SMTP + Ablage in Gesendet).
-- **Triage:** Archiv (in `AI/<Kategorie>`-Ordner), Papierkorb, gelesen/ungelesen —
-  per Hover, Tastatur (j/k/e/#/u/r/c) oder ⌘K-Palette. Endgültiges Löschen gibt es nicht.
-- **AI-Grenzen:** Die AI kann klassifizieren und formulieren — niemals senden,
-  verschieben oder löschen (per Test erzwungen, `backend/tests/test_safety.py`).
+**Emilia**, the built-in AI copilot, runs entirely locally through
+[Ollama](https://ollama.com): answer questions about your mailbox (with source
+chips), rewrite drafts in your own tone, search in plain German, summarize long
+threads — all offline. Press ⌘J to open her.
 
-**Emilia** ist der eingebaute lokale KI-Copilot (Ollama): beantwortet Fragen zu deinem
-Mail-Bestand (mit Quellen-Chips), korrigiert/verbessert deine Entwürfe und sortiert auf
-Wunsch komplett lokal. ⌘J öffnet sie.
+## Privacy — verifiable, not just promised
 
-## Installation (öffentliches Repo)
+Postfach makes **no network connection you didn't ask for.** There is no
+analytics, no crash reporting, no phone-home. You can check this yourself:
 
-Voraussetzungen: macOS, [uv](https://docs.astral.sh/uv/), Node.js ≥ 20.
-Optional: [Ollama](https://ollama.com) für Emilia — empfohlen `ollama pull qwen3:8b`
-(oder kleiner: `llama3.2`), dazu `ollama pull all-minilm:l6-v2` fürs Gedächtnis; [Claude Code CLI](https://claude.com/claude-code) für Cloud-Entwürfe.
+| Where it connects | When | What for |
+|---|---|---|
+| Your mail provider (IMAP/SMTP) | while the app runs (IMAP IDLE push) + when you send | fetching and sending your mail |
+| `localhost:11434` (Ollama) | Emilia, and local sort/draft (default) | the local AI model — never leaves your Mac |
+| The unsubscribe host | only when you click "unsubscribe" (RFC-8058 one-click) | the sender's own unsubscribe endpoint |
+| GitHub releases API | **only** when you click "Check for updates" | comparing your version to the latest |
+| A cloud AI provider (Anthropic) | **only if** you turn off `sort_local`/`draft_local` | classifying/drafting — this sends mail content to the cloud |
+
+The **About dialog** (⌘K → "Über Postfach") and `GET /api/network-info` list
+exactly these targets at runtime — including the cloud AI host **if** you've
+opted into it, so the panel can never quietly lie. `backend/tests/test_appreife.py`
+asserts no telemetry/analytics package is imported anywhere. Out of the box, the
+only outbound traffic is to your own mail server; everything else is a local call
+(Ollama) or triggered by an explicit click.
+
+**AI boundaries (test-enforced):** the AI classifies and drafts — it never sends,
+moves, or deletes. Sending happens only when *you* click. Passwords live in the
+macOS Keychain, never in a config file, log, or the search index. See
+`backend/tests/test_safety.py`.
+
+## Install as a Mac app (real binary — no uv/Node needed)
+
+Download `Postfach.app.zip` from the
+[latest release](https://github.com/tristanrathgeber/postfach/releases/latest),
+unzip, and move `Postfach.app` to `/Applications`. It's a self-contained bundle
+with an embedded Python — no toolchain required to run it. Unsigned, so on first
+launch right-click → **Open**. Cold start ~0.5 s, ~145 MB idle.
+
+A fresh install starts with no accounts — add yours in the window ("+ Konto
+hinzufügen"): pick your provider, the server settings fill in, the password goes
+straight to the Keychain. No YAML editing.
+
+For Emilia, install [Ollama](https://ollama.com) and pull a model:
+`ollama pull qwen3:8b` (chat) and `ollama pull all-minilm:l6-v2` (memory).
+
+## Build from source
+
+Requirements to *build*: macOS, [uv](https://docs.astral.sh/uv/), Node.js ≥ 20.
 
 ```bash
-# Beide Repos NEBENEINANDER klonen (postfach nutzt email-agent als Path-Dependency):
+# Clone both repos SIDE BY SIDE (postfach uses email-agent as a path dependency):
 git clone https://github.com/tristanrathgeber/email-agent
 git clone https://github.com/tristanrathgeber/postfach
 cd postfach
-```
 
-## Als Mac-App (natives Fenster statt Browser)
-
-```bash
-./scripts/build_app.sh          # baut dist/Postfach.app
+./scripts/build_app.sh          # → dist/Postfach.app (PyInstaller bundle)
 cp -r dist/Postfach.app /Applications/
 ```
 
-Unsigniert: beim ersten Start Rechtsklick → „Öffnen". Die App startet den lokalen
-Server selbst und nutzt einen bereits laufenden mit.
-
-## Sofort ausprobieren (Demo-Modus, keine Credentials nötig)
+## Try it instantly (demo mode, no credentials)
 
 ```bash
 cd backend && uv sync && cd ../frontend && npm install && npm run build && cd ..
-POSTFACH_DEMO=1 uv run --project backend postfach
-# → http://127.0.0.1:8722
+POSTFACH_DEMO=1 uv run --project backend postfach   # → http://127.0.0.1:8722
 ```
 
-## Mit echten Konten
+## What's inside
 
-1. `config/config.yaml` anlegen (Format wie email-agent, plus SMTP):
-   ```yaml
-   accounts:
-     - name: privat
-       address: tristan@meinedomain.de
-       imap_host: mail.meinedomain.de
-       # smtp_host: mail.meinedomain.de   # Default = imap_host
-       # smtp_port: 587                   # 587 STARTTLS (Default) | 465 SSL
-   ```
-2. Passwörter in `.env`: `MAIL_PRIVAT_PASSWORD=…`
-3. Optional `config/style_profile.md` vom email-agent kopieren (AI-Entwürfe in deinem Stil).
-   Emilia-Modell wählen (Abschnitt `emilia:` in der config):
-   ```yaml
-   emilia:
-     model: qwen3:8b          # lokales Modell für Chat/Korrigieren (llama3.2 = kleiner/schwächer)
-     sort_local: true         # Klassifikation lokal statt Claude
-   ```
-4. Starten: `uv run --project backend postfach`
+- **Writing:** reply/compose with an "AI draft" in your style, forward with
+  attachments, BCC, per-account signatures, local drafts (autosave), attachments
+  (25 MB), contact autocomplete, snippets.
+- **Receiving & triage:** bulk actions, spam handling, category correction, native
+  macOS notifications, background auto-sorting (launchd).
+- **Search:** local full-text (SQLite FTS5) with operators (`von:` `betreff:`
+  `hat:anhang` …) plus natural-language search via Emilia (`?` prefix); 3–13 ms
+  on thousands of mails.
+- **Threads, snooze, send-later, follow-up** — a restart-safe local queue, no cloud.
+- **Inbox hygiene:** subscription manager with one-click unsubscribe
+  (RFC-8058 / List-Unsubscribe), first-contact screener (HEY-style).
+- **Emilia II:** streaming answers, natural-language search, Sie/Du tone switch,
+  on-demand thread summaries, a global AI off-switch.
+- **Calendar & export:** answer ICS invitations inline (real RSVP), export any
+  mail to Obsidian-ready Markdown, local entity chips (amounts, dates, tracking).
+- **Onboarding:** account setup form, provider presets, folder-mapping assistant,
+  gentle keyboard-shortcut teaching.
 
-## Entwicklung
+## Configuration (advanced / power users)
 
-- Backend-Tests: `cd backend && uv run pytest` (46 Tests; IMAP/SMTP/LLM gemockt)
-- Frontend-Dev: `cd frontend && npm run dev` (Vite, Proxy auf 8722)
-- Architektur & API: `docs/superpowers/specs/…`, `docs/api-contract.md` (eingefroren)
+You can still hand-write `config/config.yaml` (accounts + taxonomy) and `.env`
+(passwords) if you prefer — UI-added accounts live separately in
+`data/accounts.json` and never touch your hand-written config. In the bundled
+app, config and data live in `~/Library/Application Support/Postfach`.
 
-## Bekannte Grenzen v0.1 (Roadmap: Spec)
+```yaml
+emilia:
+  model: qwen3:8b       # local model for chat/rewrite (llama3.2 = smaller)
+  sort_local: true      # default: classify locally. Set false to use Claude (sends mail to the cloud).
+  draft_local: true     # default: draft locally. Set false to use Claude for higher-quality drafts.
+```
 
-Kein Threading, kein Snooze/Später-senden, keine Anhänge beim Verfassen, kein
-Offline-Cache. Ordner-Anlage nutzt `/`-Hierarchie (Dovecot-Standard); für
-Courier-Server (`INBOX.`-Präfix) kommt das Namespace-Mapping in v0.2.
+Both default to `true` — a fresh install makes **no cloud calls**. Turning either
+off is an explicit opt-in that sends mail content to Anthropic; the About dialog
+then lists that host so it stays transparent.
+
+## Development
+
+- Backend tests: `cd backend && uv run pytest` (258 tests; IMAP/SMTP/LLM mocked)
+- Frontend: `cd frontend && npm run dev` (Vite, proxy to 8722), `npm test`, `npm run lint`
+- CI runs both on every push (`.github/workflows/ci.yml`); tagged pushes build and
+  publish the `.app` (`release.yml`).
+- Architecture & frozen API contract: `docs/superpowers/specs/…`, `docs/api-contract.md`
+
+## License
+
+MIT.

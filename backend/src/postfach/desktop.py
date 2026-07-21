@@ -26,7 +26,7 @@ def main() -> None:
 
     from .app import HOST, PORT, _root, create_app
 
-    root = _root()
+    root = _root()  # user_data_root(): im Binary ~/Library/Application Support/Postfach
     if not _port_in_use(HOST, PORT):
         load_env(root)
         server = threading.Thread(
