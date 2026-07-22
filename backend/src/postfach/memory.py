@@ -76,6 +76,12 @@ class OllamaEmbedder:
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
+    # Verschiedene Länge = Vektoren aus verschiedenen Embedding-Modellen. zip()
+    # würde still kürzen und einen plausibel-falschen Score liefern ([1,0,0] vs
+    # [1,0] käme als perfekter Treffer durch). Dann kein semantischer Score —
+    # die Suche fällt sauber auf den lexikalischen Teil zurück statt Müll zu ranken.
+    if len(a) != len(b):
+        return 0.0
     dot = sum(x * y for x, y in zip(a, b))
     norm = math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b))
     return dot / norm if norm else 0.0

@@ -31,6 +31,40 @@ def test_search_finds_semantically_matching_entry(tmp_path):
     assert len(results) <= 2
 
 
+def test_cosine_guards_dimension_mismatch():
+    # Ein Modellwechsel ändert die Vektor-Dimension. Ohne Schutz truncatet zip()
+    # still und liefert einen PLAUSIBLEN, falschen Score — [1,0,0] vs [1,0] käme
+    # sonst als perfekter Treffer (1.0) durch. Mismatch muss 0 ergeben.
+    from postfach.memory import _cosine
+
+    assert _cosine([1.0, 0.0, 0.0], [1.0, 0.0, 0.0]) == 1.0
+    assert abs(_cosine([1.0, 0.0, 0.0], [0.0, 1.0, 0.0])) < 1e-9
+    assert _cosine([1.0, 0.0, 0.0], [1.0, 0.0]) == 0.0
+    assert _cosine([1.0, 0.0], [1.0, 0.0, 0.0]) == 0.0
+
+
+def test_search_ignores_embeddings_from_a_different_model(tmp_path):
+    # Gespeicherte Vektoren (altes Modell) haben andere Dimension als die aktuelle
+    # Query (neues Modell). Der semantische Score darf dann NICHT fälschlich hoch
+    # sein — ohne lexische Überlappung kein Treffer (statt Müll obenauf).
+    class Fake3:
+        model = "fake-3"
+
+        def embed(self, texts):
+            return [[1.0, 0.0, 0.0] for _ in texts]
+
+    class Fake4:
+        model = "fake-4"
+
+        def embed(self, texts):
+            return [[1.0, 0.0, 0.0, 0.0] for _ in texts]
+
+    memory = MailMemory(tmp_path / "m.db", Fake3())
+    memory.upsert_many([_entry(1, subject="Völlig anderes Thema")])
+    memory._embedder = Fake4()  # „Modellwechsel" ohne Neu-Index
+    assert memory.search("gmx", "gibtesnichtimbetreff", k=3) == []
+
+
 def test_embed_text_sanitizes_control_characters(tmp_path):
     # Mail-Bodies enthalten gern Steuerzeichen — die dürfen nie zu Ollama.
     memory = MailMemory(tmp_path / "m.db", FakeEmbedder())
