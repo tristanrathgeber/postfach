@@ -159,6 +159,9 @@ def test_delete_config_account_is_protected(client):
 def test_folder_map_roundtrip_and_applies(client):
     got = client.get("/api/folder-map", params={"account": "demo"}).json()
     assert "categories" in got and "folders" in got
+    # defaults: der EFFEKTIVE Zielordner je Kategorie (nicht pauschal AI/…), damit
+    # die UI die Wahrheit zeigt statt für alles „AI/<Kat>" zu behaupten.
+    assert "defaults" in got and set(got["defaults"]) == set(got["categories"])
     client.put("/api/folder-map", json={"mapping": {"Werbung": "INBOX/Werbung"}})
     assert client.get("/api/folder-map", params={"account": "demo"}).json()["mapping"]["Werbung"] == "INBOX/Werbung"
     # Overlay überstimmt agent_config.folder_for

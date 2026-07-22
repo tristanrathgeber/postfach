@@ -56,21 +56,32 @@ export function FolderMapSection({ account }: { account: string | null }) {
         <p className="mt-2 font-mono text-[11px] text-muted">Lädt …</p>
       ) : (
         <div className="mt-2 space-y-1.5">
-          {query.data.categories.map((cat) => (
-            <label key={cat} className="flex items-center gap-2 text-[13px]">
-              <span className="w-32 shrink-0 truncate">{cat}</span>
-              <select
-                value={mapping[cat] ?? ''}
-                onChange={(e) => setCategory(cat, e.target.value)}
-                className="min-w-0 flex-1 rounded border border-hairline bg-paper px-2 py-1 text-[12.5px] focus:border-tinte focus:outline-none"
-              >
-                <option value="">AI/{cat} (Standard)</option>
-                {query.data!.folders.map((f) => (
-                  <option key={f} value={f}>{f}</option>
-                ))}
-              </select>
-            </label>
-          ))}
+          {query.data.categories.map((cat) => {
+            const def = query.data!.defaults[cat] ?? `AI/${cat}`
+            // Ein AI/-Standard ohne eigenes Mapping wird von GMX & Co. abgelehnt —
+            // solche Zeilen markieren, damit klar ist, was noch zu tun ist.
+            const needsAttention = mapping[cat] === undefined && def.startsWith('AI/')
+            return (
+              <label key={cat} className="flex items-center gap-2 text-[13px]">
+                <span className="w-32 shrink-0 truncate">{cat}</span>
+                <select
+                  value={mapping[cat] ?? ''}
+                  onChange={(e) => setCategory(cat, e.target.value)}
+                  className={`min-w-0 flex-1 rounded border bg-paper px-2 py-1 text-[12.5px] focus:border-tinte focus:outline-none ${
+                    needsAttention ? 'border-warm text-warm' : 'border-hairline'
+                  }`}
+                >
+                  <option value="">
+                    Standard → {def}
+                    {def.startsWith('AI/') ? ' (Anbieter lehnt evtl. ab)' : ''}
+                  </option>
+                  {query.data!.folders.map((f) => (
+                    <option key={f} value={f}>{f}</option>
+                  ))}
+                </select>
+              </label>
+            )
+          })}
         </div>
       )}
     </section>

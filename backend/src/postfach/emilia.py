@@ -72,10 +72,17 @@ _SYSTEM_NL_SEARCH = (
     "nach:<JJJJ-MM-TT> hat:anhang sowie freien Suchwörtern und \"Phrasen\". "
     "Heute ist {today}. Regeln: Gib GENAU EINE Zeile aus — nur die Query, keine "
     "Erklärungen, kein Markdown. Nutze nur nötige Operatoren; Füllwörter (zeig, mir, "
-    "alle, mails) fallen weg. Beispiele:\n"
+    "alle, mails) fallen weg. WICHTIG: Die inhaltlichen Substantive der Frage bleiben "
+    "IMMER als Suchwort erhalten (termin, rechnung, paket …) — niemals nur Datumsfilter "
+    "ohne Suchwort. vor:/nach: beziehen sich auf das EMPFANGSDATUM der Mail, nicht auf "
+    "ein Datum IM Text; nutze sie nur, wenn die Frage klar auf den Empfangszeitraum zielt "
+    "(»letzten Monat«, »im Juli«). Bei Fragen nach Terminen/Ereignissen suchst du das "
+    "Wort, nicht das Datum — das Ereignis kann in einer alten Mail angekündigt sein. "
+    "vor: muss stets NACH nach: liegen; niemals einen widersprüchlichen Bereich. Beispiele:\n"
     "»rechnungen von hetzner letzten monat« → rechnung von:hetzner nach:{month_ago}\n"
     "»mails mit anhang von martin« → von:martin hat:anhang\n"
-    "»was schrieb die zahnarztpraxis im juli« → von:zahnarzt nach:2026-07-01 vor:2026-08-01\n\n"
+    "»welche termine habe ich diese woche« → termin\n"
+    "»was schrieb die zahnarztpraxis im juli« → zahnarzt nach:2026-07-01 vor:2026-08-01\n\n"
     + EMILIA_GUARD
 )
 
@@ -189,7 +196,11 @@ class EmiliaService:
 
         month_ago = (date.fromisoformat(today) - timedelta(days=30)).isoformat()
         system = _SYSTEM_NL_SEARCH.format(today=today, month_ago=month_ago)
-        out = strip_code_fences(self._llm.complete(system, query, purpose="nl_search").strip())
+        raw = self._llm.complete(system, query, purpose="nl_search")
+        # „Thinking"-Modelle (qwen3 &c.) klammern ihr Nachdenken in <think>…</think> —
+        # das muss weg, sonst landet Gedankengang statt Query in der Suche.
+        raw = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL | re.IGNORECASE)
+        out = strip_code_fences(raw.strip())
         lines = [line.strip().strip("`\"' ") for line in out.splitlines() if line.strip()]
         # Modelle plaudern gern („Hier ist die Query:") — die Zeile mit
         # Operatoren gewinnt; sonst die erste, die keine Ansage („…:") ist.

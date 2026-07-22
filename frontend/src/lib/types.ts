@@ -85,6 +85,8 @@ export type FolderMap = {
   categories: string[]
   folders: string[]
   mapping: Record<string, string>
+  /** Effektiver Ziel-Ordner je Kategorie ohne eigenes Mapping (INBOX/… oder AI/…). */
+  defaults: Record<string, string>
 }
 
 /** Lokal extrahierter Chip. url nur bei Sendungsnummern (Anbieter-Tracking). */

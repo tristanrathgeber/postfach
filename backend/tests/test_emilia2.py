@@ -244,3 +244,9 @@ def test_translate_search_survives_llm_chatter():
 
     svc = EmiliaService(ChattyLLM(""), NoMem())
     assert svc.translate_search("telekom rechnung", "2026-07-21") == "telekom rechnung"
+
+    # „Thinking"-Modelle (qwen3 &c.) klammern ihren Gedankengang in <think>…</think>;
+    # der darf NICHT als Query landen — nur die echte Operator-Zeile zählt.
+    thinking = "<think>\nDer Nutzer will Rechnungen. Also von:hetzner...\n</think>\nvon:hetzner"
+    svc = EmiliaService(ChattyLLM(thinking), NoMem())
+    assert svc.translate_search("rechnungen von hetzner", "2026-07-21") == "von:hetzner"

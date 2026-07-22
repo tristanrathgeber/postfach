@@ -1388,10 +1388,16 @@ def folder_map_get(request: Request, account: str):
     acc = _account(request, account)
     with request.app.state.open_mailbox(acc) as box:
         folders = box.list_folders()
+    agent = request.app.state.config.agent
+    categories = sorted(agent.taxonomy)
+    # Effektiver Standard-Ordner OHNE eigenes Mapping (aus config.yaml-Taxonomie,
+    # sonst AI/<Kat>). So kann die UI die Wahrheit zeigen statt pauschal „AI/…".
+    defaults = {c: agent.folder_for(c) for c in categories}
     return {
-        "categories": sorted(request.app.state.config.agent.taxonomy),
+        "categories": categories,
         "folders": folders,
         "mapping": request.app.state.folder_map.mapping(),
+        "defaults": defaults,
     }
 
 
