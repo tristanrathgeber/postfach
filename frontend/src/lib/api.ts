@@ -108,6 +108,71 @@ function put<T>(path: string, body: unknown): Promise<T> {
 
 const enc = encodeURIComponent
 
+/**
+ * POST auf einen NDJSON-Endpunkt und Zeile für Zeile ausliefern.
+ *
+ * Gemeinsame Grundlage für alle streamenden Endpunkte (Emilia-Chat,
+ * Modell-Download, Ollama-Einrichtung): HTTP-Fehler VOR dem Stream werfen als
+ * ApiError, eine kaputte Zeile verwirft nie den Rest, und ein abgeschnittener
+ * Stream wird am Ende geflusht — sonst ginge ausgerechnet die Fehlerzeile verloren.
+ */
+async function streamNdjson<T>(
+  path: string,
+  body: unknown,
+  onEvent: (event: T) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  let res: Response
+  try {
+    res = await fetch(BASE + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal,
+    })
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') return
+    throw new ApiError(0, 'Backend nicht erreichbar')
+  }
+  if (!res.ok || !res.body) {
+    let detail = `Fehler ${res.status}`
+    try {
+      const data = (await res.json()) as { detail?: string }
+      if (typeof data.detail === 'string') detail = data.detail
+    } catch {
+      // Body war kein JSON — generische Meldung behalten.
+    }
+    throw new ApiError(res.status, detail)
+  }
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  const emit = (line: string) => {
+    try {
+      onEvent(JSON.parse(line) as T)
+    } catch {
+      // defekte Zeile überspringen
+    }
+  }
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      let newline
+      while ((newline = buffer.indexOf('\n')) >= 0) {
+        const line = buffer.slice(0, newline).trim()
+        buffer = buffer.slice(newline + 1)
+        if (line) emit(line)
+      }
+    }
+    const rest = (buffer + decoder.decode()).trim()
+    if (rest) emit(rest)
+  } finally {
+    reader.cancel().catch(() => {})
+  }
+}
+
 export const api = {
   /** GET /api/accounts */
   accounts: (): Promise<Account[]> => request('/accounts'),
@@ -270,64 +335,11 @@ export const api = {
    * POST /api/emilia/chat/stream — NDJSON: {"sources"} → {"delta"}× → {"done"}.
    * Ruft onEvent pro Zeile; wirft ApiError bei HTTP-Fehlern vor Stream-Beginn.
    */
-  emiliaChatStream: async (
+  emiliaChatStream: (
     body: EmiliaChatRequest,
     onEvent: (e: EmiliaStreamEvent) => void,
     signal?: AbortSignal,
-  ): Promise<void> => {
-    let res: Response
-    try {
-      res = await fetch(`${BASE}/emilia/chat/stream`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        signal,
-      })
-    } catch (e) {
-      if (e instanceof DOMException && e.name === 'AbortError') return
-      throw new ApiError(0, 'Backend nicht erreichbar')
-    }
-    if (!res.ok || !res.body) {
-      let detail = `Fehler ${res.status}`
-      try {
-        const data = (await res.json()) as { detail?: string }
-        if (typeof data.detail === 'string') detail = data.detail
-      } catch {
-        // Body war kein JSON — generische Meldung behalten.
-      }
-      throw new ApiError(res.status, detail)
-    }
-    const reader = res.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-    const emit = (line: string) => {
-      // Eine kaputte Zeile darf nie den restlichen Stream verwerfen.
-      try {
-        onEvent(JSON.parse(line) as EmiliaStreamEvent)
-      } catch {
-        // defekte Zeile überspringen
-      }
-    }
-    try {
-      for (;;) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        let newline
-        while ((newline = buffer.indexOf('\n')) >= 0) {
-          const line = buffer.slice(0, newline).trim()
-          buffer = buffer.slice(newline + 1)
-          if (line) emit(line)
-        }
-      }
-      // Abgeschnittene Streams (Proxy, Crash): letztes Fragment ohne \n flushen —
-      // sonst geht ausgerechnet die Fehlerzeile verloren.
-      const rest = (buffer + decoder.decode()).trim()
-      if (rest) emit(rest)
-    } finally {
-      reader.cancel().catch(() => {})
-    }
-  },
+  ): Promise<void> => streamNdjson('/emilia/chat/stream', body, onEvent, signal),
 
   /** GET /api/search/nl — Emilia übersetzt in Operatoren; 409 ohne Voll-Index. */
   searchNl: (account: string, q: string): Promise<NlSearchResult> =>
@@ -378,6 +390,19 @@ export const api = {
 
   // --- Cookbook / Modell-Assistent (Nachtrag v0.13) ---
 
+  /** GET /api/ollama/status — läuft die lokale KI-Laufzeit? */
+  ollamaStatus: (): Promise<{ reachable: boolean; managed: boolean; url: string }> =>
+    request('/ollama/status'),
+
+  /**
+   * POST /api/ollama/install — Postfach richtet Ollama selbst ein.
+   * NDJSON: {status,done,total} je Zeile, {done_all,reachable} am Ende, {error} bei Abbruch.
+   */
+  ollamaInstall: async (
+    onEvent: (e: { status?: string; done?: number; total?: number; done_all?: boolean; reachable?: boolean; error?: string }) => void,
+    signal?: AbortSignal,
+  ): Promise<void> => streamNdjson('/ollama/install', {}, onEvent, signal),
+
   /** GET /api/cookbook — Systemscan + kuratierter Katalog + Empfehlung. */
   cookbook: (): Promise<CookbookOverview> => request('/cookbook'),
 
@@ -389,59 +414,9 @@ export const api = {
    * POST /api/cookbook/pull — NDJSON: {status,total?,completed?} je Zeile,
    * {error} bei Abbruch. Ruft onEvent pro Zeile; wirft ApiError vor Stream-Beginn.
    */
-  cookbookPull: async (
+  cookbookPull: (
     model: string,
     onEvent: (e: PullProgress) => void,
     signal?: AbortSignal,
-  ): Promise<void> => {
-    let res: Response
-    try {
-      res = await fetch(`${BASE}/cookbook/pull`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model }),
-        signal,
-      })
-    } catch (e) {
-      if (e instanceof DOMException && e.name === 'AbortError') return
-      throw new ApiError(0, 'Backend nicht erreichbar')
-    }
-    if (!res.ok || !res.body) {
-      let detail = `Fehler ${res.status}`
-      try {
-        const data = (await res.json()) as { detail?: string }
-        if (typeof data.detail === 'string') detail = data.detail
-      } catch {
-        // Body war kein JSON — generische Meldung behalten.
-      }
-      throw new ApiError(res.status, detail)
-    }
-    const reader = res.body.getReader()
-    const decoder = new TextDecoder()
-    let buffer = ''
-    const emit = (line: string) => {
-      try {
-        onEvent(JSON.parse(line) as PullProgress)
-      } catch {
-        // defekte Zeile überspringen
-      }
-    }
-    try {
-      for (;;) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        let newline
-        while ((newline = buffer.indexOf('\n')) >= 0) {
-          const line = buffer.slice(0, newline).trim()
-          buffer = buffer.slice(newline + 1)
-          if (line) emit(line)
-        }
-      }
-      const rest = (buffer + decoder.decode()).trim()
-      if (rest) emit(rest)
-    } finally {
-      reader.cancel().catch(() => {})
-    }
-  },
+  ): Promise<void> => streamNdjson('/cookbook/pull', { model }, onEvent, signal),
 }

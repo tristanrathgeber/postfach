@@ -26,6 +26,33 @@ export function CookbookModal({ onClose }: { onClose: () => void }) {
 
   useEffect(() => () => abortRef.current?.abort(), [])
 
+  // Ollama selbst einrichten — damit der Nutzer nirgends etwas herunterladen muss.
+  const [setupStatus, setSetupStatus] = useState<{ status?: string; done?: number; total?: number } | null>(null)
+  const ollamaSetup = useMutation({
+    mutationFn: async () => {
+      let failure: string | null = null
+      setSetupStatus({ status: 'Neueste Ollama-Ausgabe suchen' })
+      await api.ollamaInstall((e) => {
+        if (e.error) failure = e.error
+        else setSetupStatus(e)
+      })
+      if (failure) throw new Error(failure)
+    },
+    onSuccess: () => {
+      setSetupStatus(null)
+      qc.invalidateQueries({ queryKey: ['cookbook'] })
+      showToast('Ollama ist eingerichtet und läuft.')
+    },
+    onError: (e) => {
+      setSetupStatus(null)
+      showToast(`Einrichten fehlgeschlagen: ${errText(e)}`, 'error')
+    },
+  })
+  const setupPct =
+    setupStatus && typeof setupStatus.total === 'number' && typeof setupStatus.done === 'number' && setupStatus.total > 0
+      ? Math.min(100, Math.round((setupStatus.done / setupStatus.total) * 100))
+      : null
+
   const activate = useMutation({
     mutationFn: (model: string) => api.cookbookActivate(model),
     onSuccess: (r) => {
@@ -69,7 +96,7 @@ export function CookbookModal({ onClose }: { onClose: () => void }) {
   }
 
   const data = query.data
-  const busy = activate.isPending || !!pulling
+  const busy = activate.isPending || !!pulling || ollamaSetup.isPending
   const recommended = data?.catalog.find((m) => m.recommended)
 
   return (
@@ -122,10 +149,38 @@ export function CookbookModal({ onClose }: { onClose: () => void }) {
               </section>
 
               {!data.ollama_reachable && (
-                <p className="rounded-lg border border-warm/40 bg-warm-bg px-4 py-2.5 text-[12.5px] text-warm">
-                  Ollama läuft gerade nicht. Starte Ollama (die lokale KI-Laufzeit), damit Postfach
-                  installierte Modelle sehen, laden und aktivieren kann.
-                </p>
+                <section className="rounded-lg border border-warm/40 bg-warm-bg px-4 py-3">
+                  <p className="text-[13px] font-medium text-warm">KI-Laufzeit fehlt noch</p>
+                  <p className="mt-1 text-[12.5px] text-ink/90">
+                    Emilia rechnet lokal über <strong>Ollama</strong>. Postfach kann das selbst
+                    einrichten — du musst nirgends etwas herunterladen. Rund 145 MB, landet in
+                    Postfachs eigenem Ordner, kein Administrator nötig.
+                  </p>
+                  {ollamaSetup.isPending ? (
+                    <div className="mt-2.5">
+                      <div className="flex items-center gap-2 text-[12px] text-muted">
+                        <SpinnerIcon size={13} />
+                        <span className="truncate">{setupStatus?.status ?? 'Wird eingerichtet …'}</span>
+                        {setupPct !== null && <span className="font-mono">{setupPct}%</span>}
+                      </div>
+                      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-hover">
+                        <div
+                          className="h-full rounded-full bg-warm transition-[width] duration-300"
+                          style={{ width: setupPct !== null ? `${setupPct}%` : '25%' }}
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => ollamaSetup.mutate()}
+                      disabled={data.demo || busy}
+                      className="mt-2.5 rounded-md bg-btn px-3.5 py-1.5 text-[13px] font-medium text-btn-ink transition hover:bg-btn-strong disabled:opacity-50"
+                    >
+                      Ollama einrichten
+                    </button>
+                  )}
+                </section>
               )}
 
               {data.demo && (

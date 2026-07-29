@@ -313,6 +313,17 @@ def create_app(root: Path | None = None, demo: bool | None = None, mailbox_facto
     if _start_watchers:
         _start_watchers()
 
+    # Hat Postfach sich selbst ein Ollama eingerichtet, wird es hier mitgestartet —
+    # sonst müsste der Nutzer es jedes Mal von Hand hochfahren. Läuft schon eins
+    # (eigenes oder vom Nutzer installiertes), passiert nichts. Best Effort.
+    if not demo:
+        try:
+            from .ollama_setup import start_server
+
+            start_server(root, cfg.emilia.ollama_url)
+        except Exception:  # ein fehlender Server darf den Start nie verhindern
+            log.exception("Eingerichtetes Ollama konnte nicht gestartet werden")
+
     # --- Zeit-Warteschlange: Undo/Später-Sends, Snooze-Aufwachen, Follow-ups ---
     from .api import SendBody, perform_send
     from .mail_imap import is_sent_folder

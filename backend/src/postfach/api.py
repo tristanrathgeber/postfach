@@ -11,6 +11,7 @@ import functools
 import json
 import logging
 import re
+import time
 
 from typing import Literal
 
@@ -819,6 +820,74 @@ def _persist_emilia_model(config_path, model: str) -> None:
     data["emilia"] = emilia
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+
+
+@router.get("/ollama/status")
+def ollama_status(request: Request):
+    """Läuft die lokale KI-Laufzeit — und hat Postfach schon eine eingerichtet?"""
+    from . import ollama_setup
+
+    state = request.app.state
+    root = state.config_path.parent.parent
+    return {
+        "reachable": ollama_setup.server_reachable(state.config.emilia.ollama_url),
+        "managed": ollama_setup.is_installed(root),
+        "url": state.config.emilia.ollama_url,
+    }
+
+
+@router.post("/ollama/install")
+def ollama_install(request: Request):
+    """Ollama selbst einrichten — Fortschritt als NDJSON.
+
+    Der Nutzer muss nichts von Hand herunterladen. Geladen wird die offizielle
+    Ausgabe von GitHub, geprüft gegen die dort veröffentlichte SHA-256-Summe,
+    entpackt in Postfachs eigenes Datenverzeichnis (kein Administrator nötig).
+    """
+    import queue
+    import threading
+
+    from fastapi.responses import StreamingResponse
+
+    from . import ollama_setup
+
+    state = request.app.state
+    if state.demo:
+        raise HTTPException(403, "Im Demo deaktiviert — Einrichten geht in der echten App.")
+    root = state.config_path.parent.parent
+    base_url = state.config.emilia.ollama_url
+
+    events: queue.Queue = queue.Queue()
+
+    def work() -> None:
+        try:
+            ollama_setup.install(root, progress=lambda d, t, p: events.put(
+                {"done": d, "total": t, "status": p}))
+            ollama_setup.start_server(root, base_url)
+            # Kurz warten, damit „fertig" auch bedeutet, dass er antwortet.
+            for _ in range(40):
+                if ollama_setup.server_reachable(base_url):
+                    break
+                time.sleep(0.25)
+            events.put({"done_all": True, "reachable": ollama_setup.server_reachable(base_url)})
+        except ollama_setup.OllamaSetupError as exc:
+            events.put({"error": str(exc)})
+        except Exception as exc:  # nie stumm scheitern
+            log.exception("Ollama-Einrichtung fehlgeschlagen")
+            events.put({"error": f"Unerwarteter Fehler: {exc}"})
+        finally:
+            events.put(None)
+
+    threading.Thread(target=work, daemon=True).start()
+
+    def ndjson():
+        while True:
+            event = events.get()
+            if event is None:
+                return
+            yield json.dumps(event, ensure_ascii=False) + "\n"
+
+    return StreamingResponse(ndjson(), media_type="application/x-ndjson")
 
 
 @router.get("/cookbook")
