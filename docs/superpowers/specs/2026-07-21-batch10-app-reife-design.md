@@ -31,7 +31,9 @@ eingebettetem Python — startbar per Doppelklick, ohne uv/Node.
 
 `scripts/build_app.sh` neu: Frontend bauen → Icon → `pyinstaller postfach.spec` →
 `.app` mit korrektem Info.plist (Dock-Icon, LSUIElement=false, Version aus
-`__version__`). Unsigniert (Rechtsklick→Öffnen dokumentiert).
+`__version__`). Unsigniert (Freigabe über Systemeinstellungen → Datenschutz &
+Sicherheit → „Dennoch öffnen“ dokumentiert; Rechtsklick→Öffnen greift seit
+macOS 15 nicht mehr).
 
 Bekannte Klippen: pywebview braucht die pyobjc-Hidden-Imports (WKWebView);
 `StaticFiles` findet `dist` über `resource_dir()`; das email-agent-Paket muss als

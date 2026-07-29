@@ -22,5 +22,5 @@ uv run --extra build pyinstaller "$REPO/postfach.spec" --noconfirm \
 
 echo "✓ $REPO/dist/Postfach.app  ($(du -sh "$REPO/dist/Postfach.app" | cut -f1))"
 echo "  Installieren:  cp -r \"$REPO/dist/Postfach.app\" /Applications/"
-echo "  (Unsigniert: einmal öffnen, dann Systemeinstellungen →"
-echo "   Datenschutz & Sicherheit → „Trotzdem öffnen\")"
+echo "  Unsigniert: einmal öffnen (macOS verweigert), dann Systemeinstellungen →"
+echo "  Datenschutz & Sicherheit → „Dennoch öffnen“ — oder: xattr -dr com.apple.quarantine /Applications/Postfach.app"
