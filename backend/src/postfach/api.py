@@ -532,51 +532,75 @@ def perform_send(state, body: SendBody, attachments: list[tuple[str, str, bytes]
     acc = state.accounts.get(body.account)
     if acc is None:
         raise HTTPException(404, f"Unbekanntes Konto „{body.account}“")
-    # Eine IMAP-Verbindung für Original-Fetch, Weiterleitungs-Anhänge UND Sent-Ablage.
-    with state.open_mailbox(acc) as box:
-        original = None
-        if body.reply_to_uid is not None:
-            original = box.get_message(body.folder, body.reply_to_uid)
-        if body.forward_of is not None and body.forward_of.include_attachments:
-            for file in box.get_attachment_files(body.forward_of.folder, body.forward_of.uid):
-                attachments.append((file.filename, file.content_type, file.payload))
-        # Das Limit gilt für die Gesamtheit — Upload-Dateien UND Original-Anhänge.
-        if sum(len(p) for _f, _t, p in attachments) > MAX_ATTACHMENT_TOTAL:
-            raise HTTPException(413, "Anhänge zusammen größer als 25 MB.")
-        mime_bytes, message_id = build_outgoing(
-            from_addr=acc.address, to=body.to, cc=body.cc,
-            subject=body.subject, body=body.body,
-            reply_to_original=original,
-            bcc=body.bcc, attachments=attachments,
-        )
-        # Im Demo-Modus ist smtp_send ein No-Op (Factory-Seam in app.py).
-        state.smtp_send(acc, mime_bytes)
-        # Ab hier IST die Mail raus — der zugehörige Entwurf ist Geschichte,
-        # egal was die Sent-Ablage noch sagt.
-        if body.draft_id:
-            state.drafts.delete(body.draft_id)
-        if body.followup_days:
-            # Wiedervorlage: Wurzel des Fadens merken — der Scheduler prüft
-            # später über den Thread-Index, ob eine fremde Antwort kam.
-            root = original and thread_root_for(original) or message_id
-            due = (datetime.now() + timedelta(days=body.followup_days)).isoformat(timespec="seconds")
-            state.schedule.add(
-                "followup", body.account, due,
-                {"subject": body.subject, "to": body.to, "thread_root": root,
-                 "sent_at": datetime.now().isoformat(timespec="seconds")},
+
+    # ─── Zweiphasig: Transport, dann Nacharbeit ───────────────────────────
+    # Undo-Send lässt JEDEN Versand über die Zeit-Warteschlange laufen, und der
+    # Scheduler reiht einen Job bei jeder Ausnahme erneut ein. Sobald SMTP die
+    # Mail angenommen hat, darf deshalb NICHTS mehr nach oben werfen — sonst
+    # bekäme der Empfänger sie ein zweites und drittes Mal. Das gilt auch für
+    # das `logout` beim Verlassen der IMAP-Verbindung, weshalb das ganze
+    # with-Statement eingefasst ist.
+    sent = False
+    warnings: list[str] = []
+
+    def _best_effort(what: str, fn):
+        try:
+            fn()
+        except Exception as exc:  # bewusst breit — nach dem Versand darf nichts durch
+            log.exception("Nacharbeit nach Versand fehlgeschlagen: %s", what)
+            warnings.append(f"{what}: {exc}")
+
+    try:
+        # Eine IMAP-Verbindung für Original-Fetch, Weiterleitungs-Anhänge UND Sent-Ablage.
+        with state.open_mailbox(acc) as box:
+            original = None
+            if body.reply_to_uid is not None:
+                original = box.get_message(body.folder, body.reply_to_uid)
+            if body.forward_of is not None and body.forward_of.include_attachments:
+                for file in box.get_attachment_files(body.forward_of.folder, body.forward_of.uid):
+                    attachments.append((file.filename, file.content_type, file.payload))
+            # Das Limit gilt für die Gesamtheit — Upload-Dateien UND Original-Anhänge.
+            if sum(len(p) for _f, _t, p in attachments) > MAX_ATTACHMENT_TOTAL:
+                raise HTTPException(413, "Anhänge zusammen größer als 25 MB.")
+            mime_bytes, message_id = build_outgoing(
+                from_addr=acc.address, to=body.to, cc=body.cc,
+                subject=body.subject, body=body.body,
+                reply_to_original=original,
+                bcc=body.bcc, attachments=attachments,
             )
-        # Gmail legt via SMTP Gesendetes selbst ab — APPEND ergäbe Duplikate.
-        if acc.provider != "gmail":
-            try:
-                box.append_sent(mime_bytes)
-            except (IMAPClientError, OSError) as exc:
-                # Die Mail IST raus — das darf nicht wie ein Sendefehler aussehen,
-                # sonst schickt der Nutzer sie „nochmal" und der Empfänger kriegt sie doppelt.
-                return {
-                    "ok": True,
-                    "warning": f"Gesendet — aber die Ablage im Gesendet-Ordner schlug fehl: {exc}",
-                }
-    return {"ok": True}
+            # Im Demo-Modus ist smtp_send ein No-Op (Factory-Seam in app.py).
+            state.smtp_send(acc, mime_bytes)
+            sent = True  # ── ab hier IST die Mail raus ──
+
+            if body.draft_id:
+                _best_effort("Entwurf löschen", lambda: state.drafts.delete(body.draft_id))
+            if body.followup_days:
+                # Wiedervorlage: Wurzel des Fadens merken — der Scheduler prüft
+                # später über den Thread-Index, ob eine fremde Antwort kam.
+                root = original and thread_root_for(original) or message_id
+                due = (datetime.now() + timedelta(days=body.followup_days)).isoformat(timespec="seconds")
+                _best_effort(
+                    "Wiedervorlage anlegen",
+                    lambda: state.schedule.add(
+                        "followup", body.account, due,
+                        {"subject": body.subject, "to": body.to, "thread_root": root,
+                         "sent_at": datetime.now().isoformat(timespec="seconds")},
+                    ),
+                )
+            # Gmail legt via SMTP Gesendetes selbst ab — APPEND ergäbe Duplikate.
+            if acc.provider != "gmail":
+                _best_effort("Ablage im Gesendet-Ordner", lambda: box.append_sent(mime_bytes))
+    except Exception as exc:
+        if not sent:
+            raise  # Transport selbst gescheitert → der Scheduler DARF erneut senden
+        log.exception("Fehler nach erfolgreichem Versand")
+        warnings.append(f"Verbindung nach dem Versand: {exc}")
+
+    if not warnings:
+        return {"ok": True}
+    return {"ok": True, "warning": "Gesendet — aber: " + "; ".join(warnings)}
+
+
 
 
 # --- Zeit-Features: Ausgang, Snooze, Wiedervorlagen ---
@@ -618,6 +642,15 @@ def outbox_cancel(request: Request, job_id: str):
             "mode": "new",
         })
     request.app.state.outbox.delete(job_id)
+    return {"ok": True}
+
+
+@router.post("/outbox/{job_id}/retry")
+def outbox_retry(request: Request, job_id: str):
+    """Einen gescheiterten Versand erneut anstoßen. Ohne das wäre eine fertig
+    geschriebene Mail nach einer Offline-Phase nur noch verwerfbar."""
+    if not request.app.state.scheduler.retry(job_id):
+        raise HTTPException(404, "Kein gescheiterter Versand mit dieser Kennung")
     return {"ok": True}
 
 
@@ -1422,6 +1455,37 @@ def version(request: Request, check: int = 0):
     from .version import version_info
 
     return version_info(check=bool(check))
+
+
+@router.get("/diagnostics")
+def diagnostics(request: Request):
+    """Was ein brauchbarer Bugreport braucht — an EINER Stelle abrufbar.
+    Bewusst ohne Mail-Inhalte: nur Version, System, Pfade und Zählerstände."""
+    import platform
+    import sys
+
+    from . import __version__
+    from .logsetup import log_path
+
+    state = request.app.state
+    root = state.config_path.parent.parent
+    logfile = log_path(root)
+    accounts = list(state.accounts)
+    return {
+        "version": __version__,
+        "python": sys.version.split()[0],
+        "os": f"{platform.system()} {platform.mac_ver()[0] or platform.release()}",
+        "arch": platform.machine(),
+        "data_root": str(root),
+        "log_file": str(logfile),
+        "log_exists": logfile.exists(),
+        "log_size": logfile.stat().st_size if logfile.exists() else 0,
+        "accounts": len(accounts),
+        "demo": state.demo,
+        "emilia_model": state.config.emilia.model,
+        "embed_model": state.config.emilia.embed_model,
+        "indexed_mails": state.emilia_memory.count_all(),
+    }
 
 
 @router.get("/network-info")

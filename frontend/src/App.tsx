@@ -418,6 +418,15 @@ function Postfach() {
     onError: (e) => showToast(`Stornieren fehlgeschlagen: ${errText(e)}`, 'error'),
   })
 
+  const retryOutboxMutation = useMutation({
+    mutationFn: (id: string) => api.retryOutbox(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['outbox'] })
+      showToast('Wird erneut versucht.')
+    },
+    onError: (e) => showToast(`Erneuter Versuch fehlgeschlagen: ${errText(e)}`, 'error'),
+  })
+
   const reminderDoneMutation = useMutation({
     mutationFn: (id: string) => api.reminderDone(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['reminders'] }),
@@ -813,7 +822,11 @@ function Postfach() {
               onDecide={(e, decision) => screenerDecideMutation.mutate({ account: e.account, addr: e.addr, decision })}
             />
           ) : view.kind === 'outbox' ? (
-            <OutboxList entries={outboxAgg.entries} onCancel={(e) => cancelOutboxMutation.mutate(e.id)} />
+            <OutboxList
+              entries={outboxAgg.entries}
+              onCancel={(e) => cancelOutboxMutation.mutate(e.id)}
+              onRetry={(e) => retryOutboxMutation.mutate(e.id)}
+            />
           ) : view.kind === 'reminders' ? (
             <RemindersList entries={remindersAgg.entries} onDone={(r) => reminderDoneMutation.mutate(r.id)} />
           ) : view.kind === 'drafts' ? (

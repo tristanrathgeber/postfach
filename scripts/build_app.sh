@@ -22,4 +22,5 @@ uv run --extra build pyinstaller "$REPO/postfach.spec" --noconfirm \
 
 echo "✓ $REPO/dist/Postfach.app  ($(du -sh "$REPO/dist/Postfach.app" | cut -f1))"
 echo "  Installieren:  cp -r \"$REPO/dist/Postfach.app\" /Applications/"
-echo "  (Unsigniert — beim ersten Start Rechtsklick → Öffnen)"
+echo "  (Unsigniert: einmal öffnen, dann Systemeinstellungen →"
+echo "   Datenschutz & Sicherheit → „Trotzdem öffnen\")"

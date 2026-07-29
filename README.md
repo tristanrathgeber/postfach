@@ -10,8 +10,32 @@ default **no cloud** — the AI runs entirely on your machine via Ollama.
 chips), rewrite drafts in your own tone, search in plain German, summarize long
 threads — all offline. Press ⌘J to open her.
 
-📖 **User manual:** [**docs/HANDBUCH.md**](docs/HANDBUCH.md) — every function
-explained, from first steps to every keyboard shortcut (German, matching the UI).
+## Public beta — read this first
+
+A solo hobby project, published early. It works and its author uses it daily,
+but expect rough edges.
+
+- **Young software.** It never hard-deletes mail — moving to trash is the worst
+  it can do, and `backend/tests/test_safety.py` enforces that. Even so: don't
+  let Postfach be the only thing standing between you and mail you can't lose.
+- **macOS only**, and the released binary is **Apple Silicon (M1 or newer)**.
+  Intel Macs have to [build from source](#build-from-source). Minimum macOS
+  version: **12.0 (Monterey)**.
+- **The app is German.** UI, error messages and the manual
+  ([**docs/HANDBUCH.md**](docs/HANDBUCH.md) — every function explained, from
+  first steps to every keyboard shortcut) are German. This README is the only
+  English part; there is no English UI yet.
+- **The app is unsigned** — there's no paid Apple developer account behind it —
+  so macOS refuses the first launch. Two clicks fix it, see
+  [Install](#install-as-a-mac-app).
+- **AI features need [Ollama](https://ollama.com)** running locally. Without it
+  Postfach is a plain mail client: sorting, chat and summaries are simply
+  unavailable, nothing breaks.
+- **Tested mostly against one GMX account** (the author's). The other IMAP
+  providers are implemented and unit-tested, but far less exercised in real
+  life. Bug reports are the most useful thing you can send.
+- **Where your data lives:** mail index and settings in
+  `~/Library/Application Support/Postfach`, passwords in the macOS Keychain.
 
 ## Privacy — verifiable, not just promised
 
@@ -38,13 +62,23 @@ moves, or deletes. Sending happens only when *you* click. Passwords live in the
 macOS Keychain, never in a config file, log, or the search index. See
 `backend/tests/test_safety.py`.
 
-## Install as a Mac app (real binary — no uv/Node needed)
+## Install as a Mac app
 
-Download `Postfach.app.zip` from the
-[latest release](https://github.com/tristanrathgeber/postfach/releases/latest),
-unzip, and move `Postfach.app` to `/Applications`. It's a self-contained bundle
-with an embedded Python — no toolchain required to run it. Unsigned, so on first
-launch right-click → **Open**. Cold start ~0.5 s, ~145 MB idle.
+A self-contained bundle with an embedded Python — no uv, Node or toolchain
+needed to run it. Cold start ~0.5 s, ~145 MB idle.
+
+1. Download `Postfach.app.zip` from the
+   [latest release](https://github.com/tristanrathgeber/postfach/releases/latest)
+   — **Apple Silicon (M1 or newer)**, macOS 12 or later.
+2. Unzip it and move `Postfach.app` to `/Applications`.
+3. Open it once. macOS will refuse, because the app is unsigned (notarizing
+   requires a paid Apple developer account this project doesn't have).
+4. Open **System Settings → Privacy & Security**, scroll down to the note about
+   Postfach, and click **"Open Anyway"**. Confirm — that's a one-time step.
+
+Right-click → Open no longer bypasses Gatekeeper on current macOS, so ignore
+that advice if you find it elsewhere. Terminal equivalent, if you prefer it:
+`xattr -dr com.apple.quarantine /Applications/Postfach.app`.
 
 A fresh install starts with no accounts — add yours in the window ("+ Konto
 hinzufügen"): pick your provider, the server settings fill in, the password goes
@@ -62,16 +96,29 @@ a German embedding model, since the mail it has to understand is German.)
 Requirements to *build*: macOS, [uv](https://docs.astral.sh/uv/), Node.js ≥ 20.
 
 ```bash
-# Clone both repos SIDE BY SIDE (postfach uses email-agent as a path dependency):
+# 1. Clone both repos SIDE BY SIDE, into the same parent directory.
 git clone https://github.com/tristanrathgeber/email-agent
 git clone https://github.com/tristanrathgeber/postfach
-cd postfach
 
-./scripts/build_app.sh          # → dist/Postfach.app (PyInstaller bundle)
+# 2. One command builds everything: frontend, icon, PyInstaller bundle.
+cd postfach && ./scripts/build_app.sh     # → dist/Postfach.app
+
+# 3. Install it.
 cp -r dist/Postfach.app /Applications/
 ```
 
+(Why two repos: the mail/LLM intelligence lives in `email-agent`, which Postfach
+pulls in as a **path dependency** — `../../email-agent` in
+`backend/pyproject.toml`. CI does exactly the same, see
+`.github/workflows/ci.yml`.)
+
+**Troubleshooting — `uv sync` fails, or `email-agent` can't be found:** the
+sibling clone is missing or in the wrong place. `email-agent/` and `postfach/`
+must sit next to each other in one parent directory.
+
 ## Try it instantly (demo mode, no credentials)
+
+Sample mails, no account and no Keychain access:
 
 ```bash
 cd backend && uv sync && cd ../frontend && npm install && npm run build && cd ..
@@ -102,12 +149,14 @@ POSTFACH_DEMO=1 uv run --project backend postfach   # → http://127.0.0.1:8722
 
 You can still hand-write `config/config.yaml` (accounts + taxonomy) and `.env`
 (passwords) if you prefer — UI-added accounts live separately in
-`data/accounts.json` and never touch your hand-written config. In the bundled
-app, config and data live in `~/Library/Application Support/Postfach`.
+`data/accounts.json` and never touch your hand-written config. Those paths are
+relative to `~/Library/Application Support/Postfach`, which is where config and
+data always live — in development too, deliberately outside the repo
+(`POSTFACH_ROOT` overrides it for tests and scripts).
 
 ```yaml
 emilia:
-  model: qwen3:8b       # local model for chat/rewrite (llama3.2 = smaller)
+  model: qwen2.5:7b     # local model for chat/rewrite (default; llama3.2:3b = smaller)
   sort_local: true      # default: classify locally. Set false to use Claude (sends mail to the cloud).
   draft_local: true     # default: draft locally. Set false to use Claude for higher-quality drafts.
 ```
@@ -118,11 +167,12 @@ then lists that host so it stays transparent.
 
 ## Development
 
-- Backend tests: `cd backend && uv run pytest` (258 tests; IMAP/SMTP/LLM mocked)
+- Backend tests: `cd backend && uv run pytest` (314 tests; IMAP/SMTP/LLM mocked)
 - Frontend: `cd frontend && npm run dev` (Vite, proxy to 8722), `npm test`, `npm run lint`
 - CI runs both on every push (`.github/workflows/ci.yml`); tagged pushes build and
   publish the `.app` (`release.yml`).
 - Architecture & frozen API contract: `docs/superpowers/specs/…`, `docs/api-contract.md`
+- Contributing: [CONTRIBUTING.md](CONTRIBUTING.md) — note the two-repo clone above.
 
 ## License
 

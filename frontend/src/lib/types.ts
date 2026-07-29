@@ -327,3 +327,21 @@ export type CookbookOverview = {
 
 /** NDJSON-Zeile von POST /api/cookbook/pull */
 export type PullProgress = { status?: string; total?: number; completed?: number; error?: string }
+
+// --- Diagnose für Bugreports (Nachtrag Beta) ---
+
+export type Diagnostics = {
+  version: string
+  python: string
+  os: string
+  arch: string
+  data_root: string
+  log_file: string
+  log_exists: boolean
+  log_size: number
+  accounts: number
+  demo: boolean
+  emilia_model: string
+  embed_model: string
+  indexed_mails: number
+}

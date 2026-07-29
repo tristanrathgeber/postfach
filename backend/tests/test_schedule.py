@@ -50,6 +50,10 @@ def test_scheduler_executes_due_send_and_removes_job(store, outbox):
 
 
 def test_scheduler_retries_failed_send_then_gives_up(store, outbox):
+    """Nach mehreren Versuchen mit wachsender Pause wird endgültig aufgegeben —
+    der Nutzer wird informiert und der Job nicht weiter versucht."""
+    from postfach.schedule import _MAX_ATTEMPTS
+
     notes = []
 
     def failing(job):
@@ -58,14 +62,57 @@ def test_scheduler_retries_failed_send_then_gives_up(store, outbox):
     scheduler = Scheduler(store, outbox, send_fn=failing, wake_fn=None,
                           followup_fn=None, notify_fn=lambda title, text: notes.append(title))
     store.add("send", "gmx", due="2026-07-21T09:00:00", payload={})
-    for _ in range(3):
-        scheduler.process_due("2026-07-21T09:01:00")
+    # Jeder Versuch schiebt die Fälligkeit nach vorn (Backoff) — deshalb muss die
+    # Test-Uhr mitlaufen, sonst wäre der Job noch nicht wieder fällig.
+    for i in range(_MAX_ATTEMPTS):
+        scheduler.process_due(f"2026-07-21T{10 + i:02d}:00:00")
     [job] = store.list("gmx")
-    assert job["attempts"] == 3 and job["kind"] == "send_failed"
+    assert job["attempts"] == _MAX_ATTEMPTS and job["kind"] == "send_failed"
     assert notes  # Nutzer wurde informiert — nie still scheitern
     # Fehlgeschlagene Jobs werden nicht erneut versucht
-    scheduler.process_due("2026-07-21T09:02:00")
-    assert store.list("gmx")[0]["attempts"] == 3
+    scheduler.process_due("2026-07-22T09:00:00")
+    assert store.list("gmx")[0]["attempts"] == _MAX_ATTEMPTS
+
+
+def test_failed_send_backs_off_instead_of_hammering(store, outbox):
+    """Ein kurzer Ausfall (Schlafmodus, WLAN-Wechsel) darf einen Versand nicht
+    binnen 60 Sekunden endgültig begraben: nach dem ersten Fehlversuch liegt die
+    nächste Fälligkeit in der Zukunft, und der Job lebt weiter."""
+    scheduler = Scheduler(store, outbox, send_fn=lambda job: (_ for _ in ()).throw(OSError("offline")),
+                          wake_fn=None, followup_fn=None, notify_fn=lambda t, x: None)
+    store.add("send", "gmx", due="2026-07-21T09:00:00", payload={})
+    scheduler.process_due("2026-07-21T09:00:30")
+    [job] = store.list("gmx")
+    assert job["kind"] == "send"           # NICHT aufgegeben
+    assert job["due"] > "2026-07-21T09:00:30"  # wartet, statt sofort erneut
+    # Sofort danach noch nicht wieder fällig → kein Dauerfeuer alle 20 s
+    scheduler.process_due("2026-07-21T09:00:50")
+    assert store.list("gmx")[0]["attempts"] == 1
+
+
+def test_user_can_retry_a_failed_send(store, outbox):
+    """Ein endgültig gescheiterter Versand muss sich erneut anstoßen lassen —
+    sonst ist eine fertig geschriebene Mail unwiederbringlich."""
+    from postfach.schedule import _MAX_ATTEMPTS
+
+    attempts = {"n": 0}
+
+    def flaky(job):
+        attempts["n"] += 1
+        if attempts["n"] <= _MAX_ATTEMPTS:
+            raise OSError("offline")
+
+    scheduler = Scheduler(store, outbox, send_fn=flaky, wake_fn=None,
+                          followup_fn=None, notify_fn=lambda t, x: None)
+    job_id = store.add("send", "gmx", due="2026-07-21T09:00:00", payload={})
+    for i in range(_MAX_ATTEMPTS):
+        scheduler.process_due(f"2026-07-21T{10 + i:02d}:00:00")
+    assert store.list("gmx")[0]["kind"] == "send_failed"
+
+    assert scheduler.retry(job_id, now="2026-07-25T08:00:00") is True
+    scheduler.process_due("2026-07-25T09:00:00")
+    assert store.list("gmx") == []  # erfolgreich gesendet und aus der Schlange
+    assert scheduler.retry("gibtsnicht") is False
 
 
 def test_scheduler_wakes_due_snooze(store, outbox):
@@ -226,13 +273,18 @@ def test_all_kinds_stop_retrying_after_max_attempts(store, outbox):
     def failing(job):
         raise RuntimeError("Konto weg")
 
+    from postfach.schedule import _MAX_ATTEMPTS
+
     scheduler = Scheduler(store, outbox, send_fn=None, wake_fn=failing,
                           followup_fn=None, notify_fn=lambda t, x: notes.append(t))
     store.add("snooze", "gmx", due="2026-07-21T09:00:00", payload={"subject": "S"})
-    for _ in range(5):
-        scheduler.process_due("2026-07-21T09:01:00")
+    # Uhr mitlaufen lassen: zwischen den Versuchen liegt jetzt eine wachsende
+    # Pause (Backoff), sonst wäre der Job noch nicht wieder fällig.
+    for i in range(_MAX_ATTEMPTS + 2):
+        scheduler.process_due(f"2026-07-2{1 + i // 12}T{(9 + i) % 24:02d}:01:00")
     [job] = store.list("gmx")
-    assert job["kind"] == "snooze_failed" and job["attempts"] == 3  # kein Endlos-Retry
+    assert job["kind"] == "snooze_failed"
+    assert job["attempts"] == _MAX_ATTEMPTS  # kein Endlos-Retry
     assert notes
 
 

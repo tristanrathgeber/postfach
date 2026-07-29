@@ -406,7 +406,15 @@ def main() -> None:
 
     from email_agent.cli import load_env
 
+    from .logsetup import setup_logging
+
+    from . import __version__
+
     root = _root()
+    setup_logging(root)  # zuerst: sonst geht ein Startfehler unbemerkt verloren
+    # Immer EINE Startzeile: so beweist das Protokoll auch im Normalfall, dass es
+    # schreibt — und ein Bugreport zeigt, ob die App überhaupt hochkam.
+    log.info("Postfach %s startet (Wurzel: %s, Port %s)", __version__, root, PORT)
     load_env(root)  # optionale .env aus der Nutzer-Wurzel (fehlt bei frischem Binary)
     uvicorn.run(create_app(root=root), host=HOST, port=PORT)
 

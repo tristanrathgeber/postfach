@@ -6,9 +6,12 @@ import { EmptyState } from './EmptyState'
 export function OutboxList({
   entries,
   onCancel,
+  onRetry,
 }: {
   entries: OutboxEntry[]
   onCancel: (entry: OutboxEntry) => void
+  /** Gescheiterten Versand erneut anstoßen — sonst wäre der Text nur verwerfbar. */
+  onRetry: (entry: OutboxEntry) => void
 }) {
   return (
     <section className="flex h-full w-[380px] shrink-0 flex-col border-r border-hairline bg-surface">
@@ -36,6 +39,16 @@ export function OutboxList({
                 <span className="shrink-0 rounded bg-hover px-1 font-mono text-[9.5px] text-muted">
                   {e.kind === 'undo' ? 'gleich' : e.kind === 'failed' ? 'fehlgeschlagen' : 'geplant'}
                 </span>
+                {e.kind === 'failed' && (
+                  <button
+                    type="button"
+                    onClick={() => onRetry(e)}
+                    title="Erneut versuchen — der Text ist noch da"
+                    className="shrink-0 rounded border border-tinte px-1.5 py-0.5 text-[11px] text-tinte transition hover:bg-tint"
+                  >
+                    Wiederholen
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => onCancel(e)}

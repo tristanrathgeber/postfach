@@ -1,0 +1,29 @@
+name: Wunsch / Idee
+description: Etwas fehlt oder geht umständlicher als nötig
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem oder Wunsch
+      description: Was willst du tun, das heute nicht (gut) geht?
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: Warum ist das wichtig?
+      description: Woran merkst du es im Alltag — wie oft, und was kostet es dich?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Was hast du stattdessen probiert?
+      description: |
+        Workarounds, andere Postfach-Funktionen, andere Mail-Programme. Ein Blick ins
+        Handbuch (`docs/HANDBUCH.md`) lohnt sich — vielleicht gibt es die Funktion schon.
+    validations:
+      required: false

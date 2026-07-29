@@ -1,0 +1,116 @@
+name: Fehler melden
+description: Etwas funktioniert nicht wie erwartet
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Danke fürs Melden. Postfach ist in der Beta — genau solche Berichte machen es besser.
+
+        **Sicherheitslücken bitte nicht hier**, sondern privat über den Tab *Security* →
+        *Report a vulnerability* (siehe
+        [SECURITY.md](https://github.com/tristanrathgeber/postfach/blob/main/SECURITY.md)).
+
+  - type: input
+    id: version
+    attributes:
+      label: Postfach-Version
+      description: Steht im Dialog **Über Postfach** (⌘K → „Über Postfach").
+      placeholder: "0.10.0"
+    validations:
+      required: true
+
+  - type: input
+    id: macos
+    attributes:
+      label: macOS-Version
+      description: Apfel-Menü → „Über diesen Mac".
+      placeholder: "macOS 15.5"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: hardware
+    attributes:
+      label: Mac-Typ
+      options:
+        - Apple Silicon (M1/M2/M3/M4)
+        - Intel
+        - weiß ich nicht
+    validations:
+      required: true
+
+  - type: dropdown
+    id: provider
+    attributes:
+      label: E-Mail-Anbieter
+      description: Bei mehreren Konten den, bei dem der Fehler auftritt.
+      options:
+        - GMX
+        - web.de
+        - T-Online
+        - Posteo
+        - mailbox.org
+        - Freenet
+        - Gmail
+        - iCloud
+        - selbst gehostet / eigener IMAP-Server
+        - anderer (bitte unten nennen)
+        - trifft nicht zu (z. B. Demo-Modus)
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Was hast du erwartet?
+      placeholder: Nach Klick auf „Senden" liegt die Mail im Ordner „Gesendet".
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Was ist stattdessen passiert?
+      description: Fehlermeldung wörtlich, wenn eine kam. Screenshots gern per Drag & Drop.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Schritte zum Reproduzieren
+      description: So knapp wie möglich, aber vollständig — jeder Klick zählt.
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log-Auszug
+      description: |
+        Postfach schreibt ein Protokoll nach
+        `~/Library/Application Support/Postfach/logs/postfach.log`
+        (rotierend, höchstens ~4 MB). Den Pfad zeigt auch der Dialog
+        **Über Postfach** (⌘K → „Über Postfach") — dort gibt es einen
+        „kopieren"-Knopf für Version, System und Protokollpfad.
+        Bitte nur den Abschnitt rund um den Fehler einfügen —
+        **keine Passwörter und keine privaten Mail-Inhalte.**
+      render: text
+      placeholder: Nur der relevante Abschnitt, nicht die ganze Sitzung.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: hygiene
+    attributes:
+      label: Vor dem Absenden
+      options:
+        - label: Ich habe **keine Passwörter und keine privaten Mail-Inhalte** eingefügt (Log-Auszüge und Screenshots geprüft).
+          required: true
+        - label: Ich benutze die neueste Postfach-Version — in der Beta gibt es Fixes nur dort.
+          required: false

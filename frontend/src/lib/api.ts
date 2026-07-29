@@ -22,6 +22,7 @@ import type {
   NetworkInfo,
   CookbookOverview,
   PullProgress,
+  Diagnostics,
   ThreadMail,
   Account,
   Classification,
@@ -201,6 +202,12 @@ export const api = {
 
   /** DELETE /api/outbox/{id} — Storno; der Auto-Save-Entwurf bleibt erhalten. */
   cancelOutbox: (id: string): Promise<{ ok: true }> => request(`/outbox/${enc(id)}`, { method: 'DELETE' }),
+
+  /** POST /api/outbox/{id}/retry — gescheiterten Versand erneut anstoßen. */
+  retryOutbox: (id: string): Promise<{ ok: true }> => post(`/outbox/${enc(id)}/retry`, {}),
+
+  /** GET /api/diagnostics — Angaben für einen brauchbaren Bugreport (ohne Mail-Inhalte). */
+  diagnostics: (): Promise<Diagnostics> => request('/diagnostics'),
 
   /** POST .../snooze — Mail bis <until> in den Ordner „Später". */
   snooze: (ref: MsgRef, until: string): Promise<{ ok: true; id: string }> =>

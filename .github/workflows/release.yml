@@ -38,4 +38,21 @@ jobs:
         run: |
           gh release create "$TAG" dist/Postfach.app.zip \
             --title "Postfach $TAG" \
-            --notes "Unsigniertes macOS-Binary. Beim ersten Start Rechtsklick -> Oeffnen. Kein uv/Node noetig."
+            --notes "$(cat <<'NOTES'
+          **Oeffentliche Beta.** Laeuft, ist aber junge Software — Rueckmeldungen willkommen.
+
+          - **Apple Silicon (M1 oder neuer)**, macOS 12.0 oder neuer. Intel-Macs bitte aus dem Quellcode bauen.
+          - Selbstenthaltendes Bundle mit eingebettetem Python — **kein uv/Node zur Laufzeit noetig**.
+          - App und Handbuch sind **deutsch**; das README ist englisch.
+          - KI-Funktionen brauchen ein lokal laufendes [Ollama](https://ollama.com). Ohne Ollama ist Postfach ein normaler Mail-Client.
+
+          **Installation (unsigniert — es gibt kein bezahltes Apple-Developer-Konto fuer dieses Projekt):**
+
+          1. ZIP entpacken, `Postfach.app` nach `/Applications` verschieben.
+          2. Einmal oeffnen — macOS verweigert den Start.
+          3. **Systemeinstellungen -> Datenschutz & Sicherheit** oeffnen, zum Hinweis auf Postfach scrollen und **"Dennoch oeffnen"** klicken. Einmalig.
+
+          Rechtsklick -> Oeffnen umgeht Gatekeeper auf aktuellem macOS **nicht** mehr.
+          Alternative im Terminal: `xattr -dr com.apple.quarantine /Applications/Postfach.app`
+          NOTES
+          )"

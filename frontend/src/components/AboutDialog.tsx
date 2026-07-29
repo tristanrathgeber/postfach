@@ -8,6 +8,7 @@ import { SpinnerIcon, XIcon } from './Icons'
 export function AboutDialog({ onClose }: { onClose: () => void }) {
   const versionQuery = useQuery({ queryKey: ['version'], queryFn: () => api.version(false), staleTime: Infinity })
   const netQuery = useQuery({ queryKey: ['network-info'], queryFn: api.networkInfo, staleTime: 60_000 })
+  const diagQuery = useQuery({ queryKey: ['diagnostics'], queryFn: api.diagnostics, staleTime: 30_000 })
   const checkMutation = useMutation({ mutationFn: () => api.version(true) })
 
   useEffect(() => {
@@ -40,6 +41,41 @@ export function AboutDialog({ onClose }: { onClose: () => void }) {
         <p className="mt-3 text-[13px] text-ink">
           Version <span className="font-mono">{version}</span> · lokal auf deinem Mac · MIT-Lizenz
         </p>
+
+        {/* Diagnose: genau die Angaben, die ein Bugreport braucht — zum Kopieren. */}
+        {diagQuery.data ? (
+          <div className="mt-3 rounded border border-hairline bg-paper px-3 py-2">
+            <div className="flex items-baseline gap-2">
+              <p className="font-mono text-[9.5px] uppercase tracking-[0.1em] text-muted">Für Fehlerberichte</p>
+              <span className="flex-1" />
+              <button
+                type="button"
+                onClick={() => {
+                  const d = diagQuery.data!
+                  const text =
+                    `Postfach ${d.version} · ${d.os} · ${d.arch}\n` +
+                    `Konten: ${d.accounts} · Modell: ${d.emilia_model} · Embedding: ${d.embed_model}\n` +
+                    `Gedächtnis: ${d.indexed_mails} Mails\nProtokoll: ${d.log_file}`
+                  navigator.clipboard?.writeText(text)
+                }}
+                className="rounded px-1.5 py-0.5 font-mono text-[10px] text-tinte transition hover:bg-tint"
+              >
+                kopieren
+              </button>
+            </div>
+            <p className="mt-1 text-[11.5px] leading-relaxed text-muted">
+              {diagQuery.data.os} · {diagQuery.data.arch} · {diagQuery.data.accounts}{' '}
+              {diagQuery.data.accounts === 1 ? 'Konto' : 'Konten'} · {diagQuery.data.indexed_mails} Mails im Gedächtnis
+            </p>
+            <p className="mt-1 break-all font-mono text-[10.5px] text-muted">
+              Protokoll: {diagQuery.data.log_file}
+              {diagQuery.data.log_exists ? '' : '  (noch leer)'}
+            </p>
+            <p className="mt-1 text-[11px] text-muted">
+              Bitte beim Melden mitschicken — aber keine Passwörter oder privaten Mail-Inhalte.
+            </p>
+          </div>
+        ) : null}
 
         <div className="mt-4">
           <p className="font-mono text-[9.5px] uppercase tracking-[0.1em] text-muted">Verifizierbare Privatheit</p>

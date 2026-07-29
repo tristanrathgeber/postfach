@@ -18,15 +18,28 @@ import shutil
 import threading
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from .stores import _JsonFile
 
 log = logging.getLogger("postfach.schedule")
 
-_MAX_ATTEMPTS = 3
+_MAX_ATTEMPTS = 8
 _TICK_SECONDS = 20
+# Wachsende Wartezeit zwischen Versuchen. Vorher wurde alle 20 s erneut probiert
+# und nach 3 Versuchen — also 60 Sekunden — endgültig aufgegeben: ein Laptop,
+# der kurz schläft oder ein WLAN-Wechsel genügte, um einen geplanten Versand
+# dauerhaft zu begraben. 60 s → 2 → 4 → 8 → 16 → 30 min (gedeckelt) hält gut
+# 1,5 Stunden durch, ohne den Log zu fluten.
+_BACKOFF_BASE_SECONDS = 60
+_BACKOFF_MAX_SECONDS = 1800
+
+
+def _backoff_due(now: str, attempts: int) -> str:
+    """Nächster Versuch: exponentiell wachsend, gedeckelt."""
+    delay = min(_BACKOFF_BASE_SECONDS * (2 ** max(attempts - 1, 0)), _BACKOFF_MAX_SECONDS)
+    return (datetime.fromisoformat(now) + timedelta(seconds=delay)).isoformat(timespec="seconds")
 
 
 def _validate_due(due: str) -> str:
@@ -79,6 +92,10 @@ class ScheduleStore(_JsonFile):
         with self._lock:
             jobs = self._read()
         return [j for j in jobs if j["due"] <= now]
+
+    def all(self) -> list[dict]:
+        with self._lock:
+            return self._read()
 
     def remove(self, job_id: str) -> bool:
         with self._lock:
@@ -173,7 +190,7 @@ class Scheduler:
                 self._process_one(job)
             except Exception:
                 log.exception("Scheduler-Job %s (%s) fehlgeschlagen", job["id"], job["kind"])
-                self._register_failure(job)
+                self._register_failure(job, now)
 
     def _process_one(self, job: dict) -> None:
         kind = job["kind"]
@@ -201,7 +218,7 @@ class Scheduler:
                 self._notify_fn("Keine Antwort erhalten", subject or "Wiedervorlage fällig")
         # *_failed / followup_due: warten auf den Nutzer, nichts tun
 
-    def _register_failure(self, job: dict) -> None:
+    def _register_failure(self, job: dict, now: str) -> None:
         # Deckel für ALLE Job-Arten — ein kaputter Job darf nicht alle 20 s
         # den Log fluten und ewig weiterprobieren.
         job["attempts"] = job.get("attempts", 0) + 1
@@ -211,7 +228,27 @@ class Scheduler:
             subject = job["payload"].get("subject", "")
             titles = {"send": "Senden fehlgeschlagen", "snooze": "Wiedervorlage fehlgeschlagen"}
             self._notify_fn(titles.get(base, "Zeitplan-Job fehlgeschlagen"), subject or job["id"])
+        elif not job["kind"].endswith("_failed"):
+            # Wachsende Pause statt Dauerfeuer: überbrückt Schlafmodus,
+            # WLAN-Wechsel und kurze Server-Ausfälle.
+            job["due"] = _backoff_due(now, job["attempts"])
         self._store.update(job)
+
+    def retry(self, job_id: str, now: str | None = None) -> bool:
+        """Einen endgültig gescheiterten Job erneut einreihen (Nutzer-Klick).
+
+        Ohne das bliebe ein Versand nach einer Offline-Phase für immer liegen
+        und der Nutzer könnte ihn nur verwerfen — eine fertig geschriebene
+        Mail wäre verloren.
+        """
+        for job in self._store.all():
+            if job["id"] == job_id and job["kind"].endswith("_failed"):
+                job["kind"] = job["kind"][: -len("_failed")]
+                job["attempts"] = 0
+                job["due"] = now or datetime.now().isoformat(timespec="seconds")
+                self._store.update(job)
+                return True
+        return False
 
 
 def start_scheduler_thread(scheduler: Scheduler) -> threading.Thread:

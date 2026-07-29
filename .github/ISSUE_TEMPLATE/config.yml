@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Sicherheitslücke melden (privat)
+    url: https://github.com/tristanrathgeber/postfach/security/advisories/new
+    about: Sicherheitsprobleme bitte NICHT als öffentliches Issue — hier privat melden.
+  - name: Handbuch
+    url: https://github.com/tristanrathgeber/postfach/blob/main/docs/HANDBUCH.md
+    about: Frage zur Bedienung? Jede Funktion und jedes Tastaturkürzel ist dort erklärt.
