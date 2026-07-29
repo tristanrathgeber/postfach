@@ -68,7 +68,7 @@ def _build_watch_connect(account: MailAccount):
 
 
 def create_app(root: Path | None = None, demo: bool | None = None, mailbox_factory=None) -> FastAPI:
-    from .paths import is_frozen, resource_dir, user_data_root
+    from .paths import resource_dir, user_data_root
 
     # root = schreibbare config/data-Wurzel (Binary: Application Support).
     root = Path(root) if root is not None else user_data_root()
@@ -79,7 +79,10 @@ def create_app(root: Path | None = None, demo: bool | None = None, mailbox_facto
     data_dir = root / "data"
     style_path = root / "config" / "style_profile.md"
     # Frontend: im Bundle aus den mitgebündelten Ressourcen, sonst aus root.
-    frontend_root = resource_dir() if is_frozen() else root
+    # Das gebaute Frontend ist eine RESSOURCE, keine Nutzerdatei: im Bundle der
+    # PyInstaller-Auszug, in der Entwicklung die Repo-Wurzel. Nie die
+    # Daten-Wurzel — die zeigt auf Application Support, dort liegt kein dist/.
+    frontend_root = resource_dir()
 
     from .stores import DraftStore, ScreenerStore, SettingsStore, SnippetStore, SubscriptionStore
 

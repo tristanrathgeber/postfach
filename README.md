@@ -67,12 +67,14 @@ macOS Keychain, never in a config file, log, or the search index. See
 A self-contained bundle with an embedded Python — no uv, Node or toolchain
 needed to run it. Cold start ~0.5 s, ~145 MB idle.
 
-1. Download `Postfach.app.zip` from the
+1. Download the `.dmg` from the
    [latest release](https://github.com/tristanrathgeber/postfach/releases/latest)
    — **Apple Silicon (M1 or newer)**, macOS 12 or later.
-2. Unzip it and move `Postfach.app` to `/Applications`.
-3. Open it once. macOS will refuse, because the app is unsigned (notarizing
-   requires a paid Apple developer account this project doesn't have).
+2. Double-click it and **drag "Postfach" onto "Programme"**. That's the install —
+   no unzipping, no terminal. (The same steps sit in the image as
+   "Zuerst lesen.txt".)
+3. Open it once from Applications. macOS will refuse, because the app is unsigned
+   (notarizing requires a paid Apple developer account this project doesn't have).
 4. Open **System Settings → Privacy & Security**, scroll down to the note about
    Postfach, and click **"Open Anyway"**. Confirm — that's a one-time step.
 
@@ -80,8 +82,8 @@ Right-click → Open no longer bypasses Gatekeeper on current macOS, so ignore
 that advice if you find it elsewhere. Terminal equivalent, if you prefer it:
 `xattr -dr com.apple.quarantine /Applications/Postfach.app`.
 
-A fresh install starts with no accounts — add yours in the window ("+ Konto
-hinzufügen"): pick your provider, the server settings fill in, the password goes
+From there the app takes over: on first start it opens the account dialog by
+itself — pick your provider, the server settings fill in, the password goes
 straight to the Keychain. No YAML editing.
 
 For Emilia, install [Ollama](https://ollama.com). You don't have to pick a model

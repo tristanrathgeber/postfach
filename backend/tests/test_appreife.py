@@ -16,6 +16,30 @@ def test_paths_dev_mode_uses_repo():
     assert (paths.resource_dir() / "frontend").exists() or (paths.resource_dir() / "backend").exists()
 
 
+def test_frontend_is_served_from_resources_not_data_root(tmp_path):
+    """Das gebaute Frontend ist eine Ressource, keine Nutzerdatei.
+
+    Regression: nachdem die Daten-Wurzel auf Application Support umgezogen ist,
+    wurde frontend/dist dort gesucht — eine frische Installation lieferte für
+    „/" nur noch {"detail":"Not Found"}, also eine leere App.
+    """
+    from fastapi.testclient import TestClient
+
+    from postfach import paths
+    from postfach.app import create_app
+
+    dist = paths.resource_dir() / "frontend" / "dist"
+    if not dist.exists():
+        import pytest as _pytest
+
+        _pytest.skip("frontend/dist nicht gebaut")
+    # root = leeres Verzeichnis (wie bei einer frischen Installation)
+    client = TestClient(create_app(root=tmp_path, demo=True))
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "<div id=\"root\"" in response.text or "<!doctype html" in response.text.lower()
+
+
 def test_user_data_root_is_never_the_repo(monkeypatch):
     """Echte Mail-Daten dürfen NIE im Git-Arbeitsverzeichnis landen.
 

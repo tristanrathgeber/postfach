@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { BatchAction, Detail, Draft, MsgRef, Snippet, Summary } from './lib/types'
 import { api, ApiError, errText } from './lib/api'
@@ -717,10 +717,23 @@ function Postfach() {
       return { title: 'Das Backend schläft noch.', subline: 'Backend starten, dann neu laden' }
     }
     if (accountsQuery.isSuccess && accounts.length === 0) {
-      return { title: 'Willkommen im Postfach.', subline: 'Konten im Backend konfigurieren, dann neu laden' }
+      // Kein „im Backend konfigurieren" — der Weg ist der Knopf links, und beim
+      // ersten Start öffnet sich der Dialog von selbst (siehe useEffect unten).
+      return { title: 'Willkommen im Postfach.', subline: 'Links auf „+ Konto hinzufügen" — Passwort geht in den Schlüsselbund' }
     }
     return null
   }, [accountsQuery.isError, accountsQuery.isSuccess, accounts.length])
+
+  // Erststart: ohne Konto ist die App nutzlos, also führt sie direkt hin —
+  // EINMAL pro Sitzung, damit ein bewusst geschlossener Dialog nicht wiederkommt.
+  const firstRunShown = useRef(false)
+  useEffect(() => {
+    if (firstRunShown.current) return
+    if (accountsQuery.isSuccess && accounts.length === 0) {
+      firstRunShown.current = true
+      setAddAccountOpen(true)
+    }
+  }, [accountsQuery.isSuccess, accounts.length])
 
   const active = searchActive ? searchAgg : messagesAgg
   const imagesEnabled = opened !== null && imagesFor === msgKey(opened)

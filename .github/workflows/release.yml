@@ -27,32 +27,43 @@ jobs:
       - name: Postfach.app bauen (PyInstaller)
         working-directory: postfach
         run: ./scripts/build_app.sh
-      - name: App zippen
-        working-directory: postfach/dist
-        run: ditto -c -k --keepParent Postfach.app Postfach.app.zip
-      - name: GitHub-Release mit .app-Download
+      - name: Installations-Image bauen (DMG)
+        working-directory: postfach
+        run: ./scripts/make_dmg.sh
+      - name: GitHub-Release mit Installer
         working-directory: postfach
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          gh release create "$TAG" dist/Postfach.app.zip \
+          gh release create "$TAG" dist/Postfach-*.dmg \
             --title "Postfach $TAG" \
             --notes "$(cat <<'NOTES'
           **Oeffentliche Beta.** Laeuft, ist aber junge Software — Rueckmeldungen willkommen.
 
-          - **Apple Silicon (M1 oder neuer)**, macOS 12.0 oder neuer. Intel-Macs bitte aus dem Quellcode bauen.
-          - Selbstenthaltendes Bundle mit eingebettetem Python — **kein uv/Node zur Laufzeit noetig**.
-          - App und Handbuch sind **deutsch**; das README ist englisch.
-          - KI-Funktionen brauchen ein lokal laufendes [Ollama](https://ollama.com). Ohne Ollama ist Postfach ein normaler Mail-Client.
+          ## Installieren
 
-          **Installation (unsigniert — es gibt kein bezahltes Apple-Developer-Konto fuer dieses Projekt):**
+          1. `Postfach-*.dmg` herunterladen und doppelklicken.
+          2. Im Fenster **„Postfach" auf „Programme" ziehen** — das ist die Installation.
+          3. In den Programmen einmal doppelklicken. macOS meldet, dass die App nicht
+             ueberprueft werden konnte (unsigniert — dieses Hobby-Projekt hat kein
+             bezahltes Apple-Entwicklerzertifikat).
+          4. **Systemeinstellungen -> Datenschutz & Sicherheit** oeffnen, unten beim Hinweis
+             auf Postfach **"Trotzdem oeffnen"** klicken. Einmalig.
 
-          1. ZIP entpacken, `Postfach.app` nach `/Applications` verschieben.
-          2. Einmal oeffnen — macOS verweigert den Start.
-          3. **Systemeinstellungen -> Datenschutz & Sicherheit** oeffnen, zum Hinweis auf Postfach scrollen und **"Dennoch oeffnen"** klicken. Einmalig.
+          Danach fragt die App direkt nach deinem E-Mail-Konto — das Passwort landet im
+          macOS-Schluesselbund. Die Anleitung liegt auch als „Zuerst lesen.txt" im Image.
 
           Rechtsklick -> Oeffnen umgeht Gatekeeper auf aktuellem macOS **nicht** mehr.
           Alternative im Terminal: `xattr -dr com.apple.quarantine /Applications/Postfach.app`
+
+          ## Gut zu wissen
+
+          - **Apple Silicon (M1 oder neuer)**, macOS 12.0 oder neuer. Intel-Macs bitte aus dem Quellcode bauen.
+          - Selbstenthaltendes Bundle mit eingebettetem Python — **kein uv/Node zur Laufzeit noetig**.
+          - App und Handbuch sind **deutsch**; das README ist englisch.
+          - KI-Funktionen brauchen ein lokal laufendes [Ollama](https://ollama.com). Ohne Ollama ist
+            Postfach ein normaler Mail-Client. Mit Ollama: ⌘K -> „Modell-Assistent" laedt das
+            passende Modell fuer deinen Mac in einem Klick.
           NOTES
           )"
