@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { openableHref } from '../lib/mailLink'
 
 // Minimales Basis-CSS, das in das (serverseitig sanitisierte) Mail-HTML injiziert wird:
 // lesbare Schrift, max-width 720px, Bilder nie breiter als der Frame.
@@ -60,6 +61,18 @@ export function HtmlMailFrame({ html }: { html: string }) {
     for (const img of Array.from(doc.images)) {
       if (!img.complete) img.addEventListener('load', measure, { once: true })
     }
+    // Links selbst öffnen: In dieser Sandbox fehlen allow-popups UND
+    // allow-top-navigation — ein target="_blank" kann dort nichts ausrichten,
+    // ohne diesen Handler passiert beim Klick auf JEDEN Link in einer
+    // HTML-Mail schlicht gar nichts (kommentarlos). Schema-Allowlist in
+    // openableHref, damit javascript:/data:/file: nie geöffnet werden.
+    doc.addEventListener('click', (event) => {
+      const anchor = (event.target as Element | null)?.closest?.('a')
+      if (!anchor) return
+      event.preventDefault()
+      const target = openableHref(anchor.getAttribute('href'))
+      if (target) window.open(target, '_blank', 'noopener,noreferrer')
+    })
   }, [measure])
 
   return (

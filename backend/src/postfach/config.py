@@ -33,8 +33,11 @@ class MailAccount:
 
 @dataclass(frozen=True)
 class EmiliaConfig:
-    model: str = "llama3.2"
-    embed_model: str = "all-minilm:l6-v2"
+    model: str = "qwen2.5:7b"
+    # Deutsches Embedding-Modell: Postfachs Mail ist deutsch, und ein
+    # englisch-lastiges Modell verfehlt deutsche Fragen („welche Termine …").
+    # Muss mit der Empfehlung in README/Modell-Assistent übereinstimmen.
+    embed_model: str = "jina/jina-embeddings-v2-base-de"
     ollama_url: str = "http://localhost:11434"
     # Local-First per Default: ein frisches Binary schickt NIE Mail-Inhalte in
     # die Cloud. Claude ist ausdrückliches Opt-in (sort_local/draft_local: false

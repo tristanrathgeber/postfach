@@ -103,8 +103,14 @@ def _mailbox_errors(fn):
 
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
+        from .memory import EmbeddingModelMissing
+
         try:
             return fn(*args, **kwargs)
+        except EmbeddingModelMissing as exc:
+            # Kein 502 „Ollama kaputt" — hier fehlt nur ein Modell, und die
+            # Meldung sagt bereits, welcher Befehl das behebt.
+            raise HTTPException(503, str(exc)) from exc
         except (httpx.HTTPError, LLMError) as exc:
             raise HTTPException(502, f"Lokales Ollama nicht erreichbar/fehlgeschlagen: {exc}") from exc
         except (IMAPClientError, OSError) as exc:

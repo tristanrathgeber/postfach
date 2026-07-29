@@ -50,6 +50,15 @@ class OllamaEmbedder:
         response = httpx.post(
             f"{self._url}/api/embed", json={"model": self._model, "input": texts}, timeout=120
         )
+        # 404 = Modell nicht installiert. Das DARF nicht im Platzhalter-Pfad
+        # landen: sonst entstünde still ein Index aus lauter Null-Vektoren, der
+        # für immer wertlos bleibt (bereits indexierte UIDs werden nie erneut
+        # eingebettet). Lieber laut scheitern, mit dem passenden Befehl.
+        if getattr(response, "status_code", None) == 404:
+            raise EmbeddingModelMissing(
+                f"Embedding-Modell „{self._model}“ ist in Ollama nicht installiert. "
+                f"Bitte einmal ausführen: ollama pull {self._model}"
+            )
         response.raise_for_status()
         return response.json()["embeddings"]
 
@@ -73,6 +82,15 @@ class OllamaEmbedder:
                 dim = len(batch[0])
             embeddings.extend(batch)
         return embeddings
+
+
+class EmbeddingModelMissing(RuntimeError):
+    """Das konfigurierte Embedding-Modell ist in Ollama nicht installiert.
+
+    Bewusst eine eigene Klasse: Dieser Fall muss den Aufrufer erreichen
+    (Index/Chat brechen mit klarer Meldung ab), statt im Platzhalter-Pfad
+    stillschweigend Null-Vektoren zu erzeugen.
+    """
 
 
 def _cosine(a: list[float], b: list[float]) -> float:

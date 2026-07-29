@@ -467,7 +467,6 @@ wheels = [
 
 [[package]]
 name = "postfach"
-version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "email-agent" },
@@ -513,7 +512,7 @@ requires-dist = [
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "uvicorn", specifier = ">=0.30" },
 ]
-provides-extras = ["desktop", "build"]
+provides-extras = ["build", "desktop"]
 
 [package.metadata.requires-dev]
 dev = [

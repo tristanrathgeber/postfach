@@ -75,6 +75,31 @@ def test_embed_text_sanitizes_control_characters(tmp_path):
     assert "\x00" not in text and "\x1b" not in text and "\x07" not in text
 
 
+def test_missing_embed_model_raises_instead_of_writing_zero_vectors(monkeypatch):
+    """Fehlt das Modell, antwortet Ollama mit 404 — dann darf NICHT still ein
+    Index aus lauter Null-Vektoren entstehen (der wäre für immer wertlos, weil
+    bereits indexierte UIDs nie erneut eingebettet werden). Stattdessen ein
+    klarer Fehler mit dem Modellnamen."""
+    import pytest as pytest_mod
+
+    import postfach.memory as memory_mod
+    from postfach.memory import EmbeddingModelMissing, OllamaEmbedder
+
+    class NotFound:
+        status_code = 404
+
+        def raise_for_status(self):
+            raise AssertionError("darf nie erreicht werden")
+
+        def json(self):
+            return {"error": 'model "x" not found, try pulling it first'}
+
+    monkeypatch.setattr(memory_mod.httpx, "post", lambda url, json=None, timeout=None: NotFound())
+    with pytest_mod.raises(EmbeddingModelMissing) as excinfo:
+        OllamaEmbedder("jina/jina-embeddings-v2-base-de").embed(["irgendwas"])
+    assert "jina/jina-embeddings-v2-base-de" in str(excinfo.value)
+
+
 def test_ollama_embedder_falls_back_to_single_texts_on_chunk_error(monkeypatch):
     # Lehnt Ollama einen Chunk ab (400), einzeln erneut versuchen und nur den
     # tatsächlich kaputten Text durch einen Platzhalter-Vektor ersetzen.

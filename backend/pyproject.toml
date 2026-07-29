@@ -1,6 +1,7 @@
 [project]
 name = "postfach"
-version = "0.1.0"
+# Eine Quelle: die Version lebt in postfach/__init__.py (siehe [tool.hatch.version]).
+dynamic = ["version"]
 description = "Local-first Notion-Mail-style client: FastAPI backend reusing email-agent intelligence"
 requires-python = ">=3.12"
 dependencies = [
@@ -30,6 +31,9 @@ email-agent = { path = "../../email-agent", editable = true }
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/postfach/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/postfach"]

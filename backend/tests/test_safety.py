@@ -46,6 +46,37 @@ def test_app_binds_localhost_only():
     assert HOST == "127.0.0.1"
 
 
+# --- Schutz gegen DNS-Rebinding / fremde Webseiten -------------------------
+# Nur an 127.0.0.1 zu lauschen genügt NICHT: löst eine bösartige Domain auf
+# 127.0.0.1 auf, spricht der Browser die lokale API als „same origin" an —
+# CORS schützt dann gar nicht. Deshalb muss der Host-Header geprüft werden.
+
+
+def test_foreign_host_header_is_rejected(tmp_path):
+    client = TestClient(create_app(root=tmp_path, demo=True))
+    r = client.get("/api/accounts", headers={"Host": "evil.example.com"})
+    assert r.status_code == 400, "fremder Host muss abgelehnt werden (DNS-Rebinding)"
+
+
+def test_localhost_hosts_still_work(tmp_path):
+    client = TestClient(create_app(root=tmp_path, demo=True))
+    for host in ("127.0.0.1", "127.0.0.1:8722", "localhost", "localhost:8722"):
+        assert client.get("/api/accounts", headers={"Host": host}).status_code == 200, host
+
+
+def test_foreign_origin_is_rejected(tmp_path):
+    """Eine fremde Seite darf die API auch nicht schreibend erreichen (CSRF)."""
+    client = TestClient(create_app(root=tmp_path, demo=True))
+    r = client.get("/api/accounts", headers={"Origin": "https://evil.example.com"})
+    assert r.status_code == 403
+
+
+def test_own_origin_is_allowed(tmp_path):
+    client = TestClient(create_app(root=tmp_path, demo=True))
+    r = client.get("/api/accounts", headers={"Origin": "http://127.0.0.1:8722"})
+    assert r.status_code == 200
+
+
 def test_classify_and_draft_have_no_mailbox_side_effects(tmp_path):
     app = create_app(root=tmp_path, demo=True)
     client = TestClient(app)

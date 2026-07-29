@@ -43,6 +43,30 @@ def _root() -> Path:
     return user_data_root()
 
 
+def _build_watch_connect(account: MailAccount):
+    """IMAP-Login für den Live-Push-Watcher.
+
+    Das Passwort kommt über resolve_password und deckt damit BEIDE Konto-Arten
+    ab: config.yaml (Umgebungsvariable) und per UI angelegte (Schlüsselbund).
+    Ein reines os.environ ließ UI-Konten immer mit leerem Passwort auflaufen —
+    die haben gar kein password_env.
+    """
+
+    def connect():
+        from imapclient import IMAPClient
+
+        from .credentials import resolve_password
+
+        password = resolve_password(account)
+        if not password:
+            raise OSError(f"Kein Passwort für „{account.name}“")
+        client = IMAPClient(account.imap_host, port=account.imap_port, ssl=True)
+        client.login(account.address, password)
+        return client
+
+    return connect
+
+
 def create_app(root: Path | None = None, demo: bool | None = None, mailbox_factory=None) -> FastAPI:
     from .paths import is_frozen, resource_dir, user_data_root
 
@@ -72,6 +96,29 @@ def create_app(root: Path | None = None, demo: bool | None = None, mailbox_facto
     async def _redact_validation(request, exc):
         redacted = [{k: v for k, v in err.items() if k != "input"} for err in exc.errors()]
         return JSONResponse(status_code=422, content={"detail": redacted})
+
+    # --- Schutz gegen DNS-Rebinding und fremde Webseiten ------------------
+    # Nur an 127.0.0.1 zu lauschen genügt NICHT: Löst eine bösartige Domain auf
+    # 127.0.0.1 auf, spricht der Browser diese API als „same origin" an — CORS
+    # greift dann nicht, und die Seite könnte das ganze Postfach lesen und in
+    # deinem Namen senden. Deshalb: Host-Header prüfen (nur localhost) und
+    # Requests mit fremdem Origin ablehnen (CSRF).
+    from starlette.middleware.trustedhost import TrustedHostMiddleware
+
+    _LOCAL_HOSTS = {"127.0.0.1", "localhost", "[::1]", "::1"}
+
+    @app.middleware("http")
+    async def _reject_foreign_origin(request, call_next):
+        origin = request.headers.get("origin")
+        if origin:
+            from urllib.parse import urlparse
+
+            if (urlparse(origin).hostname or "") not in _LOCAL_HOSTS:
+                return JSONResponse(status_code=403, content={"detail": "Fremde Herkunft abgelehnt"})
+        return await call_next(request)
+
+    # Als letztes hinzugefügt = äußerste Schicht: greift vor allem anderen.
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=sorted(_LOCAL_HOSTS))
 
     app.state.config = cfg
     app.state.config_path = root / "config" / "config.yaml"
@@ -174,8 +221,6 @@ def create_app(root: Path | None = None, demo: bool | None = None, mailbox_facto
         # Live-Push: IDLE-Watcher nur im echten Betrieb mit Default-Factory
         # (Tests injizieren mailbox_factory und bekommen keine Netz-Threads).
         if mailbox_factory is None:
-            from imapclient import IMAPClient
-
             # Wasserstand pro Konto: bis zu welcher UID wurde schon benachrichtigt
             # (verhindert Doppel-Meldungen bei Re-IDLE/EXPUNGE-Echos).
             notified_uid: dict[str, int] = {}
@@ -217,19 +262,24 @@ def create_app(root: Path | None = None, demo: bool | None = None, mailbox_facto
                     for m in fresh:
                         notify_macos(m.from_name or m.from_addr, m.subject or "(kein Betreff)")
 
-            def _watch_connect_for(account: MailAccount):
-                def connect():
-                    password = os.environ.get(account.password_env, "").strip()
-                    client = IMAPClient(account.imap_host, port=account.imap_port, ssl=True)
-                    client.login(account.address, password)
-                    return client
+            watched: set[str] = set()
 
-                return connect
+            def start_watchers() -> None:
+                """Live-Push für ALLE Konten starten — auch für die per UI
+                angelegten, die erst nach reload_managed_accounts() in
+                app.state.accounts stehen. Vorher lief die Schleife nur über
+                cfg.accounts (config.yaml): genau die Konten, die das
+                dokumentierte Onboarding anlegt, bekamen nie Push, nie
+                Benachrichtigungen und nie Auto-Indexierung. Mehrfach aufrufbar."""
+                for acc in list(app.state.accounts.values()):
+                    if acc.name in watched or not acc.imap_host:
+                        continue
+                    watched.add(acc.name)
+                    start_watcher_thread(
+                        acc.name, _build_watch_connect(acc), app.state.live, _index_new_mail
+                    )
 
-            for account in cfg.accounts:
-                start_watcher_thread(
-                    account.name, _watch_connect_for(account), app.state.live, _index_new_mail
-                )
+            app.state.start_watchers = start_watchers
 
     # Verwaltete (per UI eingerichtete) Konten dazumischen — die hand-editierte
     # config.yaml bleibt unberührt. Namen aus config.yaml haben Vorrang.
@@ -254,6 +304,11 @@ def create_app(root: Path | None = None, demo: bool | None = None, mailbox_facto
     # Eintrag beschattet (Löschen würde sonst deren Keychain-Secret entfernen).
     app.state.config_account_names = set(app.state.accounts)
     reload_managed_accounts()
+
+    # Live-Push ERST JETZT starten — vorher fehlen die per UI angelegten Konten.
+    _start_watchers = getattr(app.state, "start_watchers", None)
+    if _start_watchers:
+        _start_watchers()
 
     # --- Zeit-Warteschlange: Undo/Später-Sends, Snooze-Aufwachen, Follow-ups ---
     from .api import SendBody, perform_send

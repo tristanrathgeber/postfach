@@ -54,7 +54,8 @@ For Emilia, install [Ollama](https://ollama.com). You don't have to pick a model
 by hand: open the **Model Assistant** (⌘K → "Modell-Assistent"), which scans your
 Mac, recommends the model that best fits Postfach *and* runs on your RAM, and
 downloads + activates it in one click. (Manual route: `ollama pull qwen2.5:7b` for
-chat/sorting and `ollama pull all-minilm:l6-v2` for Emilia's memory.)
+chat/sorting and `ollama pull jina/jina-embeddings-v2-base-de` for Emilia's memory —
+a German embedding model, since the mail it has to understand is German.)
 
 ## Build from source
 
