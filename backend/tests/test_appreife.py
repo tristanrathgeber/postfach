@@ -16,6 +16,23 @@ def test_paths_dev_mode_uses_repo():
     assert (paths.resource_dir() / "frontend").exists() or (paths.resource_dir() / "backend").exists()
 
 
+def test_user_data_root_is_never_the_repo(monkeypatch):
+    """Echte Mail-Daten dürfen NIE im Git-Arbeitsverzeichnis landen.
+
+    Das Repo ist öffentlich; lägen data/ und config.yaml darin, würde ein
+    `git add -f` oder ein verrutschtes .gitignore-Muster die eigene Mailbox
+    veröffentlichen. Deshalb auch in der Entwicklung Application Support.
+    """
+    from postfach import paths
+
+    monkeypatch.delenv("POSTFACH_ROOT", raising=False)
+    root = paths.user_data_root()
+    repo = paths.resource_dir()
+    assert root != repo
+    assert repo not in root.parents, f"Daten-Wurzel {root} liegt im Repo {repo}"
+    assert "Application Support" in str(root)
+
+
 def test_paths_frozen_uses_meipass_and_appsupport(monkeypatch, tmp_path):
     from postfach import paths
 

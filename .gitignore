@@ -1,14 +1,34 @@
+# --- Niemals ins Repo: Nutzerdaten, Zugangsdaten, Mail-Inhalte -------------
+# Postfach speichert echte Daten unter ~/Library/Application Support/Postfach
+# (siehe backend/src/postfach/paths.py). Diese Muster sind der zweite Gürtel,
+# falls doch einmal jemand per POSTFACH_ROOT im Repo-Verzeichnis arbeitet.
+.env
+.env.*
+data/
+config/config.yaml
+config/style_profile.md
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.mbox
+*.eml
+
+# --- Build & Abhängigkeiten -------------------------------------------------
 .venv/
 __pycache__/
 *.pyc
 .pytest_cache/
-.env
-data/
-config/config.yaml
-config/style_profile.md
+.ruff_cache/
 node_modules/
 frontend/dist/
-.DS_Store
 dist/
 build/
 *.iconset/
+*.egg-info/
+
+# --- Werkzeug-/OS-Kram ------------------------------------------------------
+.DS_Store
+.claude/
+.playwright-mcp/

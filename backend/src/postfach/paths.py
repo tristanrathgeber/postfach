@@ -28,24 +28,30 @@ def resource_dir() -> Path:
 
 
 def user_data_root() -> Path:
-    """Schreibbare Wurzel für config/ und data/. POSTFACH_ROOT hat immer Vorrang
-    (Tests/Dev). Frozen ohne Override: ~/Library/Application Support/Postfach
-    (angelegt, falls nötig). Dev: die Repo-Wurzel."""
+    """Schreibbare Wurzel für config/ und data/.
+
+    POSTFACH_ROOT hat immer Vorrang (Tests/Skripte). Sonst IMMER
+    ~/Library/Application Support/Postfach — auch in der Entwicklung.
+
+    Bewusst NICHT die Repo-Wurzel: dort lägen echte Mail-Daten, Passwort-Env
+    und die private config.yaml mitten im Git-Arbeitsverzeichnis. Bei einem
+    öffentlichen Repo genügt ein `git add -f` oder ein verrutschtes
+    .gitignore-Muster, und die eigene Mailbox ist veröffentlicht. Getrennte
+    Verzeichnisse machen diesen Fehler unmöglich statt nur unwahrscheinlich.
+    """
     override = os.environ.get("POSTFACH_ROOT")
     if override:
         return Path(override)
-    if is_frozen():
-        try:
-            root = Path.home() / "Library" / "Application Support" / _APP_SUPPORT
-        except RuntimeError:  # HOME unbestimmbar
-            import tempfile
+    try:
+        root = Path.home() / "Library" / "Application Support" / _APP_SUPPORT
+    except RuntimeError:  # HOME unbestimmbar
+        import tempfile
 
-            root = Path(tempfile.gettempdir()) / _APP_SUPPORT
-        # Best Effort — die Stores legen ihre Verzeichnisse ohnehin lazy an
-        # (mkdir parents=True); ein Fehler hier darf den Start nicht crashen.
-        try:
-            root.mkdir(parents=True, exist_ok=True)
-        except OSError:
-            pass
-        return root
-    return Path(__file__).resolve().parents[3]
+        root = Path(tempfile.gettempdir()) / _APP_SUPPORT
+    # Best Effort — die Stores legen ihre Verzeichnisse ohnehin lazy an
+    # (mkdir parents=True); ein Fehler hier darf den Start nicht crashen.
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+    return root
