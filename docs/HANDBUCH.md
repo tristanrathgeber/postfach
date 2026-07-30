@@ -32,7 +32,8 @@ jedem Tastaturkürzel.
 16. [Privatsphäre — nachprüfbar](#16-privatsphäre--nachprüfbar)
 17. [Einstellungen (Referenz)](#17-einstellungen-referenz)
 18. [Tastaturkürzel (Referenz)](#18-tastaturkürzel-referenz)
-19. [Häufige Fragen & Problemlösung](#19-häufige-fragen--problemlösung)
+19. [Diagnose & Fehlerberichte](#19-diagnose--fehlerberichte)
+20. [Häufige Fragen & Problemlösung](#20-häufige-fragen--problemlösung)
 
 ---
 
@@ -57,13 +58,34 @@ Drei Dinge machen Postfach besonders:
 
 ## 2. Erste Schritte
 
+**Installieren.** Postfach kommt als **DMG**. Ein Doppelklick öffnet ein Fenster
+mit der App und einer Verknüpfung **Programme** — zieh **„Postfach" auf
+„Programme"**, das war die Installation. Kein Entpacken, kein Terminal. Dieselbe
+Anleitung liegt als *Zuerst lesen.txt* sichtbar im Fenster daneben.
+
+Beim ersten Öffnen meldet macOS, die App sei „nicht überprüft": Postfach ist
+unsigniert (Notarisierung verlangt ein kostenpflichtiges Apple-Entwicklerkonto).
+Einmalig **Systemeinstellungen → Datenschutz & Sicherheit** öffnen und unten bei
+der Meldung zu Postfach auf **„Trotzdem öffnen"** klicken — danach startet die
+App normal. (Rechtsklick → Öffnen umgeht das auf aktuellem macOS nicht mehr.)
+
 **Starten.** Öffne die App `Postfach.app`. Sie startet im Hintergrund einen
 lokalen Server und öffnet das Fenster. Solange die App läuft, hält sie eine
 Push-Verbindung (IMAP IDLE) zu deinem Postfach, damit neue Mail sofort erscheint.
+Hat Postfach sich sein eigenes Ollama eingerichtet, fährt es das dabei gleich mit
+hoch (→ [Kap. 14](#14-modell-assistent-cookbook)).
+
+**Erster Start.** Ohne Konto ist die App leer — deshalb öffnet sich der
+Konto-Dialog **von selbst**, einmal pro Sitzung. Schließt du ihn bewusst, kommt
+er nicht wieder; der Knopf **+ Konto hinzufügen** links bleibt
+(→ [Konten einrichten](#3-konten-einrichten)).
+
+**Wo alles liegt.** Konfiguration, lokale Daten und das Protokoll stehen immer in
+`~/Library/Application Support/Postfach` — auch bei einer Installation aus dem
+Quellcode. Passwörter liegen nicht dort, sondern im macOS-Schlüsselbund.
 
 **Zum Ausprobieren ohne eigenes Konto** gibt es einen Demo-Modus mit Beispiel-Mails
-(kein Versand, keine echten Server). In der echten App richtest du dein Konto ein
-(→ [Konten einrichten](#3-konten-einrichten)).
+(kein Versand, keine echten Server).
 
 **Befehle finden.** Mit **⌘K** öffnest du die Befehlspalette — die schnellste Art,
 jede Funktion zu erreichen. Tippe, wonach du suchst („Verfassen", „Einstellungen",
@@ -73,7 +95,9 @@ jede Funktion zu erreichen. Tippe, wonach du suchst („Verfassen", „Einstellu
 
 ## 3. Konten einrichten
 
-Klicke in der Seitenleiste auf **+ Konto hinzufügen**.
+Klicke in der Seitenleiste auf **+ Konto hinzufügen**. Beim allerersten Start
+öffnet Postfach diesen Dialog von sich aus — du musst nichts suchen und keine
+YAML-Datei anfassen.
 
 **Formularfelder**
 
@@ -137,6 +161,24 @@ eingeklappt wurde.
 auf **Bilder laden** zeigt sie — aber nur für genau diese eine Mail. HTML-Mails
 werden in einem abgeschotteten Rahmen ohne Skripte gerendert und stehen in **jedem
 Theme auf hellem Papier** (E-Mails sind für Weiß gestaltet).
+
+**Anhänge ansehen.** Unter der Mail steht jeder Anhang als Knopf mit Name und
+Größe; ein Auge-Symbol zeigt, dass sich eine Vorschau öffnen lässt. Ein Klick
+öffnet die **Vorschau als Overlay** über der App:
+
+- **Bilder**, **PDF** und **Text/CSV** werden direkt angezeigt.
+- Bei mehreren Anhängen blätterst du mit **‹ ›** oder **←/→**; oben steht
+  „{Name} · 3 von 5".
+- **Esc**, das **✕** oben rechts oder ein Klick auf den dunklen Rand schließen.
+  Solange die Vorschau offen ist, erreicht keine Taste die Mail darunter — `e`
+  archiviert also nichts aus Versehen.
+- **Herunterladen** legt die Datei zuverlässig in **`~/Downloads`** ab („In
+  ‚Downloads' gespeichert: …"). Ein schon vorhandener Name wird nicht
+  überschrieben, sondern zu `Rechnung (1).pdf`.
+- Dateitypen, die im Browser Skripte ausführen könnten (**HTML, SVG, XML**),
+  zeigt Postfach bewusst **nicht** an: dort steht „Keine Vorschau möglich" mit dem
+  Download-Knopf. Der Server liefert solche Anhänge grundsätzlich nur als Download
+  aus, nie zur Anzeige.
 
 **Gesprächsfäden (Threads).** Gehört eine Mail zu einem Faden (> 1 Nachricht),
 erscheint rechts die Leiste **Konversation (N)**. Klicke eine Mail darin an, um sie
@@ -211,6 +253,13 @@ aus. Alle findest du in der Ansicht **Ausgang** (mit Abbrechen) bzw.
 - **Snooze.** Taste `z` schiebt eine Mail auf „Morgen 08:00" (bzw. per Menü auf eine
   andere Zeit). Sie verschwindet in einen „Später"-Ordner und kommt zur Zeit
   ungelesen zurück.
+- **Wenn ein Versand scheitert.** Postfach probiert es mit wachsendem Abstand
+  erneut — 1, 2, 4, 8, 16 und dann höchstens 30 Minuten, zusammen gut anderthalb
+  Stunden. Ein zugeklappter Laptop oder ein WLAN-Wechsel begräbt eine Mail damit
+  nicht mehr. Erst danach steht der Eintrag im **Ausgang** als *fehlgeschlagen*
+  (rot) und du wirst benachrichtigt. Dort hast du dann zwei Knöpfe:
+  **Wiederholen** stellt den Versand sofort wieder in die Schlange („Wird erneut
+  versucht.") — der geschriebene Text ist noch da —, **Verwerfen** wirft ihn weg.
 
 Sende-Jobs entstehen **ausschließlich** aus einem echten Sende-Klick — die
 KI-Schicht kann nie senden.
@@ -377,8 +426,24 @@ des Cookbooks aus PewDiePies Odysseus.
   `config.yaml` **und** schaltet die laufende App sofort um (kein Neustart) — es gilt
   dann zugleich fürs Sortieren/Entwerfen, wenn die lokal laufen.
 
-Läuft Ollama gerade nicht, weist der Assistent darauf hin. Im Demo-Modus sind Laden
-und Aktivieren deaktiviert (die Empfehlung ist trotzdem echt).
+**Ollama fehlt noch? Postfach richtet es selbst ein.** Ist keine KI-Laufzeit
+erreichbar, steht oben die Karte *„KI-Laufzeit fehlt noch"* mit dem Knopf
+**Ollama einrichten**. Ein Klick genügt — du musst nirgends etwas herunterladen:
+
+- Postfach holt die **offizielle, aktuelle Ollama-Ausgabe** (rund 145 MB) von
+  GitHub und zeigt dabei einen Fortschrittsbalken.
+- Es prüft sie gegen die **von GitHub veröffentlichte SHA-256-Prüfsumme**. Stimmt
+  sie nicht, wird nichts installiert.
+- Entpackt wird in **Postfachs eigenen Datenordner** — kein Administratorrecht,
+  nichts in `/Applications`, kein Eingriff ins System.
+- Danach startet Postfach den Server gleich mit und tut das ab jetzt bei jedem
+  App-Start automatisch.
+- **Läuft schon ein Ollama-Server** (deiner oder ein selbst installierter), wird
+  **nichts geladen** und kein zweiter gestartet — der Knopf erscheint dann gar
+  nicht erst.
+
+Im Demo-Modus sind Einrichten, Laden und Aktivieren deaktiviert (die Empfehlung
+ist trotzdem echt).
 
 ---
 
@@ -401,7 +466,8 @@ Telemetrie, kein Analytics, kein Phone-Home. Der Dialog **Über Postfach** (⌘K
 
 - deine Konten: **IMAP** (empfangen/Push) und **SMTP** (senden auf Klick),
 - **Ollama** `localhost:11434` (lokale KI),
-- **api.github.com** (Update-Prüfung — **nur** auf Klick),
+- **api.github.com** (Update-Prüfung — **nur** auf Klick; von dort kommt auch die
+  Ollama-Ausgabe, wenn du **Ollama einrichten** anklickst),
 - und **nur falls** du Sortieren/Entwerfen auf Cloud gestellt hast, den **Cloud-KI-Host**
   (z. B. `api.anthropic.com`) — **rot** markiert mit dem Hinweis, dass dafür
   Mail-Inhalte den Anbieter erreichen.
@@ -465,6 +531,13 @@ Einzeltasten wirken **nicht**, während du in einem Eingabefeld tippst.
 | `f` | Weiterleiten |
 | `v` | Lesen-Ansicht umschalten |
 
+**In der Anhang-Vorschau** (andere Tasten sind hier bewusst wirkungslos)
+
+| Taste | Aktion |
+|---|---|
+| `←` / `→` | Vorheriger / nächster Anhang |
+| `Esc` | Vorschau schließen |
+
 **Verfassen**
 
 | Taste | Aktion |
@@ -477,11 +550,45 @@ Einzeltasten wirken **nicht**, während du in einem Eingabefeld tippst.
 
 ---
 
-## 19. Häufige Fragen & Problemlösung
+## 19. Diagnose & Fehlerberichte
 
-**Emilia/KI reagiert nicht.** Läuft Ollama? Öffne den **Modell-Assistenten** — er
-sagt dir, ob Ollama erreichbar ist, und hilft beim Einrichten eines Modells. Und ist
-**KI aktiviert** in den Einstellungen an?
+Postfach schreibt ein **Protokoll**. Die gebündelte App hat kein Konsolenfenster —
+ohne Protokoll verschwände ein Startfehler oder ein abgerissener IMAP-Lauf spurlos,
+und „die App tut nichts" wäre nicht nachvollziehbar.
+
+- **Wo:** `~/Library/Application Support/Postfach/logs/postfach.log`. Die Datei
+  wird bei etwa 1 MB rotiert, drei ältere Stände bleiben liegen (zusammen ~4 MB).
+- **Was drinsteht:** Zeitpunkt, Modul, Fehlertext und Kennungen (Ordner, Job-Id).
+  **Keine Mail-Inhalte, keine Passwörter.** Und keine Telemetrie: die Datei bleibt
+  auf deinem Rechner, verschickt wird sie nie von allein.
+
+**Angaben zum Mitschicken.** Der Dialog **Über Postfach** (⌘K → „Über Postfach")
+hat den Block **Für Fehlerberichte** mit Betriebssystem, Architektur, Anzahl
+Konten, Mails im Gedächtnis und dem Pfad zum Protokoll (mit dem Zusatz *(noch
+leer)*, solange nichts geschrieben wurde). Der Knopf **kopieren** legt genau die
+Zeilen in die Zwischenablage, die ein Bericht braucht:
+
+```
+Postfach 0.10.0 · macOS 15.5 · arm64
+Konten: 2 · Modell: qwen2.5:7b · Embedding: jina/jina-embeddings-v2-base-de
+Gedächtnis: 4213 Mails
+Protokoll: /Users/…/Library/Application Support/Postfach/logs/postfach.log
+```
+
+**Ein gutes Issue** ([GitHub](https://github.com/tristanrathgeber/postfach/issues))
+enthält diesen Block, dazu: was du getan hast, was passiert ist, was du erwartet
+hättest. Passende Zeilen aus dem Protokoll helfen sehr — aber **lies sie vorher
+durch** und füge **niemals Passwörter oder private Mail-Inhalte** ein. Ein Issue
+ist öffentlich.
+
+---
+
+## 20. Häufige Fragen & Problemlösung
+
+**Emilia/KI reagiert nicht.** Läuft Ollama? Öffne den **Modell-Assistenten**: fehlt
+die Laufzeit, steht dort **Ollama einrichten** — ein Klick, und Postfach lädt und
+startet sie selbst (→ [Kap. 14](#14-modell-assistent-cookbook)). Ist ein Modell
+aktiv? Und ist **KI aktiviert** in den Einstellungen an?
 
 **Die KI-Suche sagt „409" / verlangt einen Index.** Baue in Emilias Panel einmal das
 **Gedächtnis** auf bzw. lass den Volltext-Index vollständig durchlaufen.
@@ -498,7 +605,28 @@ nicht dein normales.
 **Eine gesendete Mail soll zurück.** Innerhalb des Rückgängig-Fensters „Rückgängig"
 klicken. Länger vorplanen? Nutze **Später senden** und **Stornieren**.
 
+**Ein Versand ist fehlgeschlagen.** Im **Ausgang** steht der Eintrag rot als
+*fehlgeschlagen*. **Wiederholen** stellt ihn erneut in die Schlange — der Text ist
+noch da (→ [Kap. 7](#7-senden-mit-netz--undo-später-wiedervorlage)).
+
 **Anhang zu groß.** Grenze ist 25 MB gesamt (inkl. mitgesendeter Originale).
+
+**Ein Anhang zeigt „Keine Vorschau möglich".** Der Typ (HTML, SVG, XML …) lässt
+sich nicht sicher anzeigen. **Herunterladen** legt ihn in `~/Downloads` — von dort
+öffnest du ihn mit dem Programm deiner Wahl.
+
+**macOS sagt, die App sei „nicht überprüft".** Normal bei unsignierten Apps:
+Systemeinstellungen → Datenschutz & Sicherheit → **„Trotzdem öffnen"**. Einmalig
+(→ [Kap. 2](#2-erste-schritte)).
+
+**Wo liegen meine Daten?** In `~/Library/Application Support/Postfach` —
+Konfiguration, lokaler Index, Warteschlange und Protokoll. Passwörter stehen
+ausschließlich im macOS-Schlüsselbund.
+
+**Wo finde ich das Protokoll?**
+`~/Library/Application Support/Postfach/logs/postfach.log`. Der Pfad steht auch im
+Dialog **Über Postfach** unter „Für Fehlerberichte", mitsamt einem
+Kopieren-Knopf für die Systemangaben (→ [Kap. 19](#19-diagnose--fehlerberichte)).
 
 **Wo geht die App online?** Dialog **Über Postfach** — er zeigt jede Verbindung
 ehrlich, inklusive Cloud-KI, falls aktiv.

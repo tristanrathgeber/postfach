@@ -8,7 +8,55 @@ Alle nennenswerten Änderungen an Postfach. Format nach
 
 —
 
-## [0.10.0] — erste öffentliche Beta
+## [0.11.0] — erste öffentliche Beta
+
+Die Version, die als Installer veröffentlicht wird. Schwerpunkt: Einrichtung
+ohne Handarbeit, verlässlicher Versand und nachvollziehbare Fehler.
+
+### Added
+
+- **Installation per DMG**: „Postfach" auf „Programme" ziehen — kein Entpacken,
+  kein Terminal. Beim ersten Start öffnet sich der Konto-Dialog von selbst.
+- **Ollama richtet sich selbst ein**: Knopf im Modell-Assistenten lädt die
+  offizielle Ausgabe (~145 MB), prüft die SHA-256-Summe von GitHub und legt sie
+  in Postfachs eigenen Ordner — ohne Administrator, ohne manuellen Download.
+  Läuft bereits ein Ollama-Server, wird der benutzt.
+- **Anhang-Vorschau**: Klick auf einen Anhang öffnet Bilder, PDFs und Text
+  direkt in der App; ‹ › blättert, Esc/✕ schließt. „Herunterladen" legt
+  zuverlässig in `~/Downloads` ab (der alte Download-Link funktionierte im
+  App-Fenster nicht).
+- **Sechs Farbthemen** (Schreibtisch, Nord, Sepia, Wald, Rosé, Graphit) je in
+  hell und dunkel, dazu ein frei wählbarer Akzent.
+- **Modell-Assistent**: scannt den Mac und empfiehlt das Modell, das am besten
+  zu Postfach passt *und* auf dem vorhandenen Arbeitsspeicher läuft.
+- **Protokoll & Diagnose**: rotierende Logdatei unter
+  `~/Library/Application Support/Postfach/logs/`, „Für Fehlerberichte" mit
+  Kopier-Knopf im Über-Dialog, sichtbares Fenster bei Startfehlern.
+- **Gescheiterte Sends wiederholen** statt nur verwerfen.
+
+### Fixed
+
+- **Sicherheit**: Die lokale API prüfte weder `Host`- noch `Origin`-Header. Eine
+  bösartige Webseite hätte per DNS-Rebinding das Postfach lesen und in deinem
+  Namen senden können. Jetzt nur noch localhost, fremde Herkunft wird abgelehnt.
+- **Kein Doppelversand mehr**: Schlug ein Schritt *nach* erfolgreichem SMTP fehl
+  (z. B. Verbindungsabbruch), reihte der Scheduler den Job erneut ein — der
+  Empfänger bekam die Mail bis zu dreimal.
+- **Per UI angelegte Konten** bekamen nie Live-Push, Benachrichtigungen oder
+  Auto-Indexierung — also genau die Konten, die das Onboarding anlegt.
+- **Tote Links in HTML-Mails**: `target="_blank"` konnte in der Sandbox nichts
+  öffnen; ein Klick tat kommentarlos nichts.
+- **Emilias Gedächtnis** schrieb bei fehlendem Embedding-Modell dauerhaft
+  Null-Vektoren, meldete aber Erfolg. Jetzt klarer Fehler samt Befehl.
+- **Nutzerdaten liegen nie mehr im Repo-Verzeichnis** (immer Application
+  Support) — vorher lagen Mail-Index, Konfiguration und `.env` im
+  Arbeitsverzeichnis eines öffentlichen Repos.
+- Versionsnummern kommen jetzt aus einer einzigen Quelle; das Bundle meldete
+  dem Update-Check sonst eine falsche Version.
+- Gatekeeper-Anleitung korrigiert: „Rechtsklick → Öffnen" wirkt seit macOS 15
+  nicht mehr.
+
+## [0.10.0] — interne Vorstufe
 
 Erste Version, die als Mac-App verteilt wird. Aus elf Feature-Batches (siehe
 `docs/ROADMAP.md`) entstanden; alles läuft lokal auf `127.0.0.1:8722`.

@@ -7,6 +7,18 @@ from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 REPO = os.path.abspath(os.getcwd() + "/..")  # gebaut aus backend/ heraus
 
+# Version aus EINER Quelle lesen (postfach/__init__.py). Vorher stand sie hier
+# dreimal hartkodiert und lief auseinander — das Bundle hätte dem eingebauten
+# Update-Check eine falsche Version gemeldet.
+_version_file = os.path.join(REPO, "backend", "src", "postfach", "__init__.py")
+with open(_version_file, encoding="utf-8") as _f:
+    for _line in _f:
+        if _line.startswith("__version__"):
+            VERSION = _line.split("=", 1)[1].strip().strip('"').strip("'")
+            break
+    else:
+        raise SystemExit(f"__version__ nicht gefunden in {_version_file}")
+
 datas, binaries, hiddenimports = [], [], []
 
 # Ganze Pakete einsammeln (inkl. Daten/Untermodule) — email_agent ist Path-Dependency.
@@ -50,12 +62,12 @@ app = BUNDLE(
     name="Postfach.app",
     icon=os.path.join(REPO, "dist", "icon.icns"),
     bundle_identifier="app.postfach.desktop",
-    version="0.10.0",
+    version=VERSION,
     info_plist={
         "CFBundleName": "Postfach",
         "CFBundleDisplayName": "Postfach",
-        "CFBundleShortVersionString": "0.10.0",
-        "CFBundleVersion": "0.10.0",
+        "CFBundleShortVersionString": VERSION,
+        "CFBundleVersion": VERSION,
         "NSHighResolutionCapable": True,
         "LSMinimumSystemVersion": "12.0",
         "LSUIElement": False,
