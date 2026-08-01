@@ -4,10 +4,12 @@ import { api, errText } from '../lib/api'
 import type { AccountTestResult } from '../lib/types'
 import { SpinnerIcon, XIcon } from './Icons'
 import { useToast } from './Toast'
+import { useOverlay } from '../lib/overlay'
 
 /** Konto einrichten ohne YAML: Provider wählen (füllt Host/Port), testen,
  * speichern. Das Passwort geht direkt in den macOS-Schlüsselbund. */
 export function AddAccountDialog({ onClose }: { onClose: () => void }) {
+  useOverlay() // Tastenkürzel der App ruhen, solange dieser Dialog offen ist
   const { showToast } = useToast()
   const qc = useQueryClient()
   const providersQuery = useQuery({ queryKey: ['providers'], queryFn: api.providers, staleTime: Infinity })

@@ -4,11 +4,13 @@ import { api, errText } from '../lib/api'
 import type { CookbookModel, PullProgress } from '../lib/types'
 import { SpinnerIcon, XIcon } from './Icons'
 import { useToast } from './Toast'
+import { useOverlay } from '../lib/overlay'
 
 /** Modell-Assistent („Cookbook"): scannt das System, empfiehlt das Modell, das
  * am besten zu Postfach passt UND hier läuft, lädt es und aktiviert es (setzt es
  * als Emilias Modell — zugleich fürs Sortieren/Entwerfen, wenn die lokal laufen). */
 export function CookbookModal({ onClose }: { onClose: () => void }) {
+  useOverlay() // Tastenkürzel der App ruhen, solange dieser Dialog offen ist
   const qc = useQueryClient()
   const { showToast } = useToast()
   const query = useQuery({ queryKey: ['cookbook'], queryFn: api.cookbook, staleTime: 5_000 })

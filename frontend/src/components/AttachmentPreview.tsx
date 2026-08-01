@@ -6,6 +6,7 @@ import { attachmentKind } from '../lib/attachmentKind'
 import { formatSize } from '../lib/format'
 import { ChevronRightIcon, DownloadIcon, PaperclipIcon, SpinnerIcon, XIcon } from './Icons'
 import { useToast } from './Toast'
+import { useOverlay } from '../lib/overlay'
 
 type Props = {
   account: string
@@ -20,6 +21,7 @@ type Props = {
  * (nur sichere Typen — der Server liefert alles andere als Download aus), mit
  * ‹ › zwischen mehreren Anhängen. Esc / ✕ / Klick daneben schließen. */
 export function AttachmentPreview({ account, uid, folder, attachments, startIndex, onClose }: Props) {
+  useOverlay() // Tastenkürzel der App ruhen, solange dieser Dialog offen ist
   const { showToast } = useToast()
   const [pos, setPos] = useState(() => Math.min(Math.max(startIndex, 0), attachments.length - 1))
   const dialogRef = useRef<HTMLDivElement>(null)

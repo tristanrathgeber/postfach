@@ -47,6 +47,7 @@ import { AboutDialog } from './components/AboutDialog'
 import { CookbookModal } from './components/CookbookModal'
 import { SparklesIcon } from './components/Icons'
 import { ToastProvider, useToast } from './components/Toast'
+import { overlayOpen } from './lib/overlay'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -495,7 +496,11 @@ function Postfach() {
       if (aiEnabled) setEmiliaOpen((v) => !v)
       return
     }
-    if (paletteOpen || composer || settingsOpen) return // Palette/Composer/Einstellungen behandeln Esc selbst
+    // Kein Kürzel darf durch einen offenen Dialog hindurchgreifen. overlayOpen()
+    // deckt alle an- gemeldeten Dialoge ab (Über, Modell-Assistent, Konto,
+    // Anhang-Vorschau …) — vorher stand hier eine handgepflegte Liste, und neue
+    // Dialoge wurden schlicht vergessen: „e" archivierte dann die Mail dahinter.
+    if (overlayOpen() || paletteOpen || composer || settingsOpen) return // Esc behandeln die Dialoge selbst
     if (e.key === 'Escape') {
       // Esc-Priorität: Palette > Composer > Auswahl > Emilia > Suche.
       // In Eingabefeldern gehört Esc dem Feld (Suchfeld leeren, Emilia-Input).

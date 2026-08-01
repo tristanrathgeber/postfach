@@ -2,10 +2,12 @@ import { useEffect } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { api, errText } from '../lib/api'
 import { SpinnerIcon, XIcon } from './Icons'
+import { useOverlay } from '../lib/overlay'
 
 /** Über Postfach: Version, verifizierbare Privatheit (ALLE ausgehenden Ziele,
  * inkl. Cloud-LLM falls aktiv) und ein MANUELLER Update-Check. */
 export function AboutDialog({ onClose }: { onClose: () => void }) {
+  useOverlay() // Tastenkürzel der App ruhen, solange dieser Dialog offen ist
   const versionQuery = useQuery({ queryKey: ['version'], queryFn: () => api.version(false), staleTime: Infinity })
   const netQuery = useQuery({ queryKey: ['network-info'], queryFn: api.networkInfo, staleTime: 60_000 })
   const diagQuery = useQuery({ queryKey: ['diagnostics'], queryFn: api.diagnostics, staleTime: 30_000 })
