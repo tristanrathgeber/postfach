@@ -5,10 +5,25 @@ A local-first mail app in the spirit of Notion Mail — for any IMAP account
 (`127.0.0.1:8722`). No account required to try it, **no telemetry**, and by
 default **no cloud** — the AI runs entirely on your machine via Ollama.
 
+![Postfach — Posteingang mit geöffneter Mail](docs/img/01-posteingang.png)
+
 **Emilia**, the built-in AI copilot, runs entirely locally through
 [Ollama](https://ollama.com): answer questions about your mailbox (with source
 chips), rewrite drafts in your own tone, search in plain German, summarize long
 threads — all offline. Press ⌘J to open her.
+
+![Emilia — der lokale KI-Copilot, mit Modell und Gedächtnisstand in der Kopfzeile](docs/img/02-emilia.png)
+
+Emilia needs a model. You don't have to hunt one down: the **model assistant**
+scans your Mac, recommends the one that fits Postfach *and* your RAM, and sets up
+Ollama itself — no manual download, no admin rights.
+
+![Modell-Assistent — Systemscan, Empfehlung mit Passungswert, Katalog](docs/img/03-modell-assistent.png)
+
+Six colour palettes, each in light and dark — and the mail itself always stays on
+light paper, because that's what mail is designed for.
+
+![Postfach im dunklen Sepia-Theme, mit Anhang-Vorschau-Chips](docs/img/04-dunkel-sepia.png)
 
 ## Public beta — read this first
 
