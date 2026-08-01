@@ -1,0 +1,92 @@
+name: KI-Code-Review
+
+# Automatisches Review jedes Pull Requests durch Claude.
+#
+# BEWUSST `pull_request` und NICHT `pull_request_target`: pull_request_target
+# liefe mit Schreibrechten im Kontext des Zielrepos, waehrend es fremden Code
+# aus dem PR auscheckt — eine bekannte Rechteausweitung. Der Preis dafuer: PRs
+# aus Forks bekommen keine Repository-Secrets, das Review wird dort
+# uebersprungen (siehe Schritt „Schluessel vorhanden?"). Fremde PRs prueft
+# damit weiterhin der Mensch — was bei Beitraegen von aussen ohnehin richtig ist.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Claude prueft den PR
+    runs-on: ubuntu-latest
+    steps:
+      # Ohne hinterlegten Schluessel soll der Lauf still uebersprungen werden,
+      # statt jeden PR mit einem roten Kreuz zu versehen. Der Wert wird ueber
+      # env gelesen und nie in einen Befehl interpoliert.
+      - name: Schluessel vorhanden?
+        id: key
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            echo "vorhanden=ja" >> "$GITHUB_OUTPUT"
+          else
+            echo "vorhanden=nein" >> "$GITHUB_OUTPUT"
+            echo "Kein ANTHROPIC_API_KEY hinterlegt (oder PR aus einem Fork) — Review wird uebersprungen."
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.key.outputs.vorhanden == 'ja'
+        with:
+          fetch-depth: 0   # Claude soll den Verlauf sehen, nicht nur den Kopf
+
+      - name: Review
+        if: steps.key.outputs.vorhanden == 'ja'
+        uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_args: "--max-turns 12"
+          # Projektspezifisch statt generisch: die Punkte unten sind genau die,
+          # an denen dieses Projekt in der Vergangenheit echte Fehler hatte.
+          prompt: |
+            Du pruefst einen Pull Request an „Postfach", einer local-first
+            Mail-App fuer macOS (FastAPI-Backend, React-Frontend, lokale KI ueber
+            Ollama). Antworte auf DEUTSCH.
+
+            Pruefe mit Vorrang in dieser Reihenfolge:
+
+            1. SICHERHEIT UND DATENSCHUTZ. Die App verarbeitet fremde Mails und
+               speichert IMAP-Passwoerter. Achte auf: Rendern von Mail-HTML
+               (muss serverseitig saniert und in der Sandbox bleiben), alles was
+               die Host-/Origin-Pruefung der lokalen API aufweicht, Passwoerter
+               oder Mail-Inhalte in Logs, Fehlermeldungen oder Antworten,
+               Pfad-Ausbrueche beim Entpacken oder Speichern von Anhaengen,
+               und neue ausgehende Verbindungen (das Projekt verspricht
+               Telemetriefreiheit und listet jedes Ziel im Ueber-Dialog).
+
+            2. DATENVERLUST. Mail darf nie doppelt rausgehen und nie verloren
+               sein. Alles, was den Versandpfad, die Zeit-Warteschlange
+               (schedule.py) oder IMAP-Verschiebungen beruehrt, verdient
+               besondere Skepsis: Was passiert bei Verbindungsabbruch mitten
+               drin? Wird ein Job erneut eingereiht, obwohl SMTP schon
+               angenommen hat?
+
+            3. STILLE FEHLER. Das Projekt hatte mehrfach Bugs, die nichts
+               meldeten: ein Knopf, der kommentarlos nichts tat; ein Index aus
+               Null-Vektoren, der Erfolg meldete. Frage bei jedem except-Block
+               und jedem Standardwert: Merkt der Nutzer, wenn das schiefgeht?
+
+            4. TESTS. Neues Verhalten braucht einen Test, der ohne die Aenderung
+               fehlschlaegt. Fehlt der, sag es.
+
+            5. Passt die Aenderung zu Handbuch (docs/HANDBUCH.md) und
+               API-Vertrag (docs/api-contract.md)? Wurde beides mitgezogen?
+
+            Sei knapp und konkret: Datei, Zeile, was schiefgehen kann. Nenne
+            keine Stilfragen, wenn es inhaltliche Funde gibt. Ist der PR in
+            Ordnung, sag das in zwei Saetzen — erfinde keine Beanstandungen.

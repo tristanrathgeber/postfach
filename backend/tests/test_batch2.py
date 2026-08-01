@@ -231,8 +231,9 @@ def test_spam_on_spam_folder_is_a_noop(client):
 
 
 def test_pick_new_unseen_dedupes_notifications():
-    from postfach.demo import _mail
     from dataclasses import replace
+
+    from postfach.demo import _mail
     from postfach.notify import pick_new_unseen
 
     m1 = _mail(101, "Alt", "A", "a@x.de", "t")

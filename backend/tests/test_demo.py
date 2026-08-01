@@ -20,7 +20,7 @@ def test_demo_actions_mutate_folders():
 
 def test_demo_set_seen_toggles():
     box = DemoMailbox()
-    unread = [m for m in box.list_messages("INBOX", limit=50) if not m.seen][0]
+    unread = next(m for m in box.list_messages("INBOX", limit=50) if not m.seen)
     box.set_seen("INBOX", unread.uid, True)
     updated = box.get_message("INBOX", unread.uid)
     assert updated.seen is True

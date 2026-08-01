@@ -39,8 +39,33 @@ path = "src/postfach/__init__.py"
 packages = ["src/postfach"]
 
 [dependency-groups]
-dev = ["pytest>=8.0", "httpx>=0.27"]
+dev = ["pytest>=8.0", "httpx>=0.27", "ruff>=0.15"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+# --- Ruff: Linting ---------------------------------------------------------
+# Zeilenlänge am tatsächlichen Stil des Bestands ausgerichtet (nicht am
+# Ruff-Standard 88): bei 88 waeren 449 Zeilen "falsch", die bewusst so gesetzt
+# sind. 120 laesst den Bestand in Ruhe und haelt trotzdem Ausreisser auf.
+[tool.ruff]
+line-length = 120
+extend-exclude = ["src/postfach/_demo_assets.py"]  # maschinell erzeugt, eine Zeile Base64
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "C4", "SIM", "RUF"]
+ignore = [
+  # Deutsche Typografie („…", —, ➜) ist in Kommentaren und Meldungen Absicht,
+  # nicht ein versehentliches Unicode-Zeichen.
+  "RUF002",
+  "RUF003",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Demo-Postfach: die Beispielmails sind Daten, keine Logik — Umbrueche wuerden
+# sie nur schlechter lesbar machen.
+"src/postfach/demo.py" = ["E501"]
+# Tests: lange Erwartungswerte gehoeren in eine Zeile, und Test-Doubles sammeln
+# Aufrufe absichtlich in einem Klassenattribut (RUF012 zielt auf Produktivcode).
+"tests/*" = ["E501", "RUF012"]

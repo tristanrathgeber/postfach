@@ -39,8 +39,9 @@ def _account(port=587):
 
 
 def test_build_outgoing_sets_recipients_and_reply_threading():
-    from postfach.demo import _mail
     from dataclasses import replace
+
+    from postfach.demo import _mail
 
     original = replace(
         _mail(1, "Frage", "Alice", "alice@example.com", "Hallo?"),

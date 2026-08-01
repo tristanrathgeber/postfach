@@ -55,8 +55,10 @@ def is_later(candidate: str, reference: str) -> bool:
     """Zeitvergleich über Zonen hinweg: Mail-Header tragen beliebige Offsets,
     lokale Zeiten sind naiv — Stringvergleich würde UTC-Antworten übersehen."""
     def aware(value: str) -> datetime:
-        parsed = datetime.fromisoformat(value)
-        return parsed.astimezone() if parsed.tzinfo else parsed.astimezone()
+        # astimezone() deckt BEIDE Fälle ab: aware wird in die Lokalzone
+        # umgerechnet, naive gilt laut Python bereits als Lokalzeit. Eine
+        # Fallunterscheidung suggerierte einen Unterschied, den es nicht gibt.
+        return datetime.fromisoformat(value).astimezone()
 
     try:
         return aware(candidate) > aware(reference)

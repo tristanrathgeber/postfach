@@ -29,10 +29,10 @@ def test_index_walks_mailbox_folders(tmp_path):
 
 
 def test_chat_uses_memory_and_returns_sources(tmp_path):
-    service, memory = _service(tmp_path)
+    service, _memory = _service(tmp_path)
     service.index("demo", DemoMailbox())
     llm = FakeChatLLM()
-    service._llm = llm  # noqa: SLF001 — Test greift bewusst auf das Fake zu
+    service._llm = llm
     result = service.chat("demo", "Was steht in der Telekom Rechnung?")
     assert result["reply"].startswith("Die Telekom-Rechnung")
     assert result["sources"]

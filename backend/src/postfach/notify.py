@@ -8,6 +8,7 @@ nie in den AppleScript-Quelltext interpoliert (Injection).
 
 from __future__ import annotations
 
+import contextlib
 import subprocess
 
 _SCRIPT = 'on run argv\ndisplay notification (item 2 of argv) with title (item 1 of argv)\nend run'
@@ -34,12 +35,10 @@ def pick_new_unseen(mails, last_uid: int) -> list:
 
 
 def notify_macos(title: str, text: str) -> None:
-    try:
+    # Benachrichtigung ist Komfort — nie einen Watcher daran sterben lassen.
+    with contextlib.suppress(OSError, subprocess.SubprocessError):
         subprocess.run(
             ["osascript", "-e", _SCRIPT, title[:120], text[:200]],
             capture_output=True,
             timeout=10,
         )
-    except (OSError, subprocess.SubprocessError):
-        # Benachrichtigung ist Komfort — nie einen Watcher daran sterben lassen.
-        pass

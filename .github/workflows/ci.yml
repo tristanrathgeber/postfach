@@ -5,8 +5,43 @@ on:
     branches: [main]
   pull_request:
 
+# Ein neuer Push auf denselben Branch macht den vorherigen Lauf gegenstandslos —
+# abbrechen spart Laufzeit und gibt schneller Rueckmeldung.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
+  lint:
+    name: Linting
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      # Ruff braucht die Projekt-Abhaengigkeiten NICHT — deshalb ohne den
+      # Geschwister-Checkout von email-agent und ohne uv sync. Laeuft in Sekunden.
+      - name: Python-Linting (ruff)
+        working-directory: backend
+        run: uvx ruff check src tests
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Frontend-Linting (oxlint)
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run lint
+
   backend:
+    name: Backend-Tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout postfach
@@ -22,6 +57,9 @@ jobs:
           path: email-agent
       - name: Install uv
         uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: postfach/backend/uv.lock
       - name: Backend-Tests
         working-directory: postfach/backend
         run: |
@@ -29,16 +67,81 @@ jobs:
           uv run pytest -q
 
   frontend:
+    name: Frontend-Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v5
         with:
           node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
       - name: Frontend pruefen
         working-directory: frontend
         run: |
           npm ci
-          npm run lint
           npm test
-          npm run build
+          npm run build   # enthaelt die Typpruefung (tsc -b)
+
+  # Der Auslieferungsweg wurde bisher NIE geprueft: gebaut wurde erst beim Tag,
+  # der erste echte Lauf war das Release selbst. Dieser Job baut das Bundle bei
+  # jedem PR und startet es — ein kaputter Build faellt so vor dem Tag auf.
+  macos-build:
+    name: macOS-Bundle bauen und starten
+    runs-on: macos-14
+    steps:
+      - name: Checkout postfach
+        uses: actions/checkout@v4
+        with:
+          path: postfach
+      - name: Checkout email-agent
+        uses: actions/checkout@v4
+        with:
+          repository: tristanrathgeber/email-agent
+          path: email-agent
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: postfach/backend/uv.lock
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: postfach/frontend/package-lock.json
+      - name: App bauen (PyInstaller)
+        working-directory: postfach
+        run: ./scripts/build_app.sh
+      - name: Installations-Image bauen (DMG)
+        working-directory: postfach
+        run: ./scripts/make_dmg.sh
+      # Rauchtest: startet das Bundle wirklich, liefert es API UND Oberflaeche?
+      # Ein Bundle, dem ein Hidden-Import fehlt, baut sauber und startet nicht.
+      - name: Rauchtest — startet die gebaute App?
+        working-directory: postfach
+        env:
+          POSTFACH_ROOT: ${{ runner.temp }}/postfach-smoke
+        run: |
+          dist/Postfach.app/Contents/MacOS/Postfach &
+          for i in $(seq 1 30); do
+            sleep 1
+            if curl -fsS -o /dev/null http://127.0.0.1:8722/api/version; then
+              echo "API antwortet nach ${i}s:"
+              curl -fsS http://127.0.0.1:8722/api/version
+              curl -fsS -o /dev/null http://127.0.0.1:8722/ && echo "Oberflaeche wird ausgeliefert"
+              exit 0
+            fi
+          done
+          echo "Die gebaute App war nach 30s nicht erreichbar." >&2
+          exit 1
+
+  docs:
+    name: Doku pruefen
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Das Handbuch hat ein Inhaltsverzeichnis mit Ankern; ein umbenanntes
+      # Kapitel bricht die Verweise still. Ebenso zeigen README-Bilder ins Leere,
+      # wenn eine Datei umzieht.
+      - name: Verweise in der Doku pruefen
+        run: python3 scripts/check_docs.py

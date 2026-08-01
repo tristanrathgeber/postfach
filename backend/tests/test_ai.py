@@ -1,8 +1,9 @@
 import json
 
+from email_agent.config import Config as AgentConfig
+
 from postfach.ai import AiService
 from postfach.demo import DemoMailbox
-from email_agent.config import Config as AgentConfig
 
 
 class FakeBackend:

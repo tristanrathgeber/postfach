@@ -1,0 +1,60 @@
+name: CodeQL
+
+# Statische Sicherheitsanalyse von GitHub. Postfach haelt IMAP-Zugangsdaten und
+# rendert fremdes Mail-HTML (siehe SECURITY.md) — hier lohnt sich ein Scanner,
+# der Injection- und Path-Traversal-Muster findet, bevor sie im Release landen.
+# Treffer landen im Tab "Security" -> Code scanning, nicht als Issue-Flut.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    # Montags 04:27 UTC: nachts, ausserhalb der Arbeitszeit, und bewusst nicht
+    # zur vollen Stunde — dann stauen sich bei GitHub die Cron-Jobs aller Repos.
+    # Der Lauf faengt neue CodeQL-Regeln fuer Code, der sich gerade nicht aendert.
+    - cron: '27 4 * * 1'
+
+# Parallele Laeufe zum selben Branch abbrechen — spart Actions-Minuten, wenn
+# mehrere Commits schnell hintereinander gepusht werden.
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyse (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      # Befunde ins Code-Scanning schreiben duerfen.
+      security-events: write
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # build-mode "none": Python und TypeScript werden direkt aus dem
+          # Quelltext analysiert. Deshalb muss hier — anders als in ci.yml —
+          # weder das Nachbar-Repo email-agent ausgecheckt noch "uv sync" oder
+          # "npm ci" ausgefuehrt werden. Kein Build, keine Path-Dependency,
+          # kein Netzwerkzugriff auf Paketregister.
+          - language: python
+            build-mode: none
+          - language: javascript-typescript
+            build-mode: none
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: CodeQL initialisieren
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - name: Analyse ausfuehren
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}

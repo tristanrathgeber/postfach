@@ -12,24 +12,23 @@ import json
 import logging
 import re
 import time
-
+from pathlib import Path
 from typing import Literal
 
 import httpx
+from email_agent.llm.base import LLMError
+from email_agent.textutil import truncate
 from fastapi import APIRouter, HTTPException, Request, Response
 from imapclient.exceptions import IMAPClientError
 from pydantic import BaseModel, ValidationError
 from starlette.concurrency import run_in_threadpool
 
-from email_agent.llm.base import LLMError
-from email_agent.textutil import truncate
-
 from . import attach
 from .config import MailAccount
 from .extract import extract_entities
 from .mail_imap import ParsedMail
-from .search import thread_root_for
 from .sanitize import sanitize_mail_html
+from .search import thread_root_for
 
 log = logging.getLogger(__name__)
 
@@ -285,9 +284,7 @@ def attachment(request: Request, account: str, uid: int, index: int, folder: str
     )
 
 
-def _downloads_dir() -> "Path":
-    from pathlib import Path
-
+def _downloads_dir() -> Path:
     return Path.home() / "Downloads"
 
 
@@ -304,7 +301,7 @@ def save_attachment(request: Request, account: str, uid: int, index: int, folder
     try:
         saved = attach.save_bytes_to_dir(_downloads_dir(), file.filename, file.payload)
     except OSError as exc:
-        raise HTTPException(500, f"Konnte nicht speichern: {exc}")
+        raise HTTPException(500, f"Konnte nicht speichern: {exc}") from exc
     return {"path": str(saved), "filename": saved.name}
 
 
@@ -578,7 +575,7 @@ def perform_send(state, body: SendBody, attachments: list[tuple[str, str, bytes]
             if body.followup_days:
                 # Wiedervorlage: Wurzel des Fadens merken — der Scheduler prüft
                 # später über den Thread-Index, ob eine fremde Antwort kam.
-                root = original and thread_root_for(original) or message_id
+                root = (original and thread_root_for(original)) or message_id
                 due = (datetime.now() + timedelta(days=body.followup_days)).isoformat(timespec="seconds")
                 _best_effort(
                     "Wiedervorlage anlegen",
@@ -1334,10 +1331,10 @@ _RSVP_LABEL = {"accepted": "Zusage", "tentative": "Vorbehalt", "declined": "Absa
 def invite_respond(request: Request, body: InviteRespondBody):
     """RSVP auf eine ICS-Einladung — explizite Nutzer-Aktion, geht über den
     normalen Versandpfad an den Organisator (mit Sent-Ablage)."""
+    import email.utils
+
     from .invites import build_invite_reply_ics, parse_invite
     from .mail_send import build_invite_reply
-
-    import email.utils
 
     acc = _account(request, body.account)
     state = request.app.state

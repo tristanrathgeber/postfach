@@ -100,7 +100,7 @@ def _cosine(a: list[float], b: list[float]) -> float:
     # die Suche fällt sauber auf den lexikalischen Teil zurück statt Müll zu ranken.
     if len(a) != len(b):
         return 0.0
-    dot = sum(x * y for x, y in zip(a, b))
+    dot = sum(x * y for x, y in zip(a, b, strict=True))  # Länge oben geprüft
     norm = math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b))
     return dot / norm if norm else 0.0
 
@@ -155,7 +155,7 @@ class MailMemory:
                         e["account"], e["folder"], e["uid"], e["subject"], e["from_name"],
                         e["from_addr"], e["date"], e["snippet"], json.dumps(emb),
                     )
-                    for e, emb in zip(entries, embeddings)
+                    for e, emb in zip(entries, embeddings, strict=True)
                 ],
             )
 

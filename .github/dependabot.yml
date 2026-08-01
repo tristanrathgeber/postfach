@@ -1,0 +1,82 @@
+version: 2
+
+# Abhaengigkeiten aktuell halten, ohne den Issue-Tracker zu fluten. Postfach ist
+# ein Hobby-Projekt einer einzelnen Person — es gibt niemanden, der taeglich
+# zwanzig Bump-PRs durchsieht. Deshalb ueberall die gleichen vier Bremsen:
+#   1. woechentlich statt taeglich,
+#   2. hoechstens 3 offene PRs pro Oekosystem,
+#   3. minor + patch gebuendelt in EINEN PR; Major-Updates bleiben einzeln,
+#      weil genau die einen echten Blick und einen Testlauf brauchen,
+#   4. cooldown: 7 Tage Abstand zu frisch veroeffentlichten Versionen. Uebernommene
+#      Pakete werden meist innerhalb von Stunden bis Tagen entdeckt und
+#      zurueckgezogen — wer eine Woche wartet, bekommt sie gar nicht erst
+#      vorgeschlagen. Nebeneffekt: noch weniger PRs.
+updates:
+  # --- Backend (Python, uv) -------------------------------------------------
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 3
+    labels: [dependencies]
+    commit-message:
+      prefix: deps
+      include: scope
+    cooldown:
+      default-days: 7
+    groups:
+      backend-klein:
+        applies-to: version-updates
+        update-types: [minor, patch]
+    ignore:
+      # email-agent kommt nicht von PyPI, sondern als Pfad-Abhaengigkeit aus dem
+      # Nachbar-Repo (siehe [tool.uv.sources] in backend/pyproject.toml).
+      # Dependabot kann dafuer keine Version aufloesen — sonst nur Fehlermeldungen.
+      - dependency-name: email-agent
+
+  # --- Frontend (npm) -------------------------------------------------------
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 3
+    labels: [dependencies]
+    commit-message:
+      prefix: deps
+      include: scope
+    cooldown:
+      default-days: 7
+    groups:
+      # Ein Bundle fuer alles Kleine. Gerade im npm-Baum kommen sonst pro Woche
+      # ein Dutzend Einzel-PRs fuer Typen- und Build-Pakete.
+      frontend-klein:
+        applies-to: version-updates
+        update-types: [minor, patch]
+
+  # --- GitHub Actions -------------------------------------------------------
+  # Die Workflows pinnen auf Major-Tags (@v4, @v5), d.h. Patch- und
+  # Minor-Updates zieht GitHub ohnehin selbst nach. Hier melden sich also
+  # praktisch nur Major-Spruenge — genau die, die man sehen will.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Europe/Berlin
+    open-pull-requests-limit: 3
+    labels: [dependencies]
+    commit-message:
+      prefix: deps
+    cooldown:
+      default-days: 7
+    groups:
+      actions-klein:
+        applies-to: version-updates
+        update-types: [minor, patch]

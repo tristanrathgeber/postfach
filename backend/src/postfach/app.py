@@ -84,9 +84,8 @@ def create_app(root: Path | None = None, demo: bool | None = None, mailbox_facto
     # Daten-Wurzel — die zeigt auf Application Support, dort liegt kein dist/.
     frontend_root = resource_dir()
 
-    from .stores import DraftStore, ScreenerStore, SettingsStore, SnippetStore, SubscriptionStore
-
     from . import __version__
+    from .stores import DraftStore, ScreenerStore, SettingsStore, SnippetStore, SubscriptionStore
 
     app = FastAPI(title="Postfach", version=__version__)
 
@@ -252,7 +251,7 @@ def create_app(root: Path | None = None, demo: bool | None = None, mailbox_facto
                 app.state.search.add_mails(account_name, "INBOX", mails)
                 with notify_lock:
                     last = notified_uid.get(account_name)
-                    if last is None:
+                    if last is None:  # noqa: SIM108 — Ternär würde die Erklärung je Zweig zerreißen
                         # Erster Push seit App-Start: nur die neueste Mail melden
                         # (der Rest ist Bestand), Wasserstand auf Max setzen.
                         fresh = [m for m in mails[:1] if not m.seen]
@@ -417,12 +416,10 @@ def create_app(root: Path | None = None, demo: bool | None = None, mailbox_facto
 
 def main() -> None:
     import uvicorn
-
     from email_agent.cli import load_env
 
-    from .logsetup import setup_logging
-
     from . import __version__
+    from .logsetup import setup_logging
 
     root = _root()
     setup_logging(root)  # zuerst: sonst geht ein Startfehler unbemerkt verloren

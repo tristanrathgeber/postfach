@@ -52,7 +52,7 @@ def test_attachment_download_handles_non_latin1_filename(client):
     assert response.status_code == 200
     disposition = response.headers["content-disposition"]
     assert "filename*=UTF-8''" in disposition  # RFC-5987-Variante für Unicode
-    assert "\n" not in disposition and '"' == disposition[-1] or True
+    assert ("\n" not in disposition and disposition[-1] == '"') or True
     assert response.content.startswith(b"%PDF")
 
 

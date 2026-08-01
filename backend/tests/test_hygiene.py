@@ -7,7 +7,6 @@ import pytest
 from postfach.demo import _mail
 from postfach.unsubscribe import parse_list_unsubscribe
 
-
 # --- List-Unsubscribe-Parsing (pure) ---
 
 

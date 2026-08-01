@@ -40,7 +40,6 @@ def _failure_window(webview, message: str, logfile) -> None:
 def main() -> None:
     import uvicorn
     import webview
-
     from email_agent.cli import load_env
 
     from .app import HOST, PORT, _root, create_app
@@ -60,7 +59,7 @@ def main() -> None:
         def serve() -> None:
             try:
                 uvicorn.run(create_app(root=root), host=HOST, port=PORT, log_level="warning")
-            except BaseException as exc:  # noqa: BLE001 — alles protokollieren
+            except BaseException as exc:
                 log.exception("Backend abgebrochen")
                 failure.append(exc)
 

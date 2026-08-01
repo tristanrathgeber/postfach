@@ -4,7 +4,6 @@ import sys
 
 import pytest
 
-
 # --- paths.py: gebündelte Ressourcen vs. schreibbare Nutzerdaten ---
 
 

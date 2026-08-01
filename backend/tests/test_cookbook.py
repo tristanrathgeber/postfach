@@ -108,9 +108,8 @@ def test_cookbook_pull_and_activate_blocked_in_demo(tmp_path):
 
 
 def test_cookbook_activate_persists_and_hot_swaps(tmp_path, monkeypatch):
-    from fastapi.testclient import TestClient
-
     import yaml
+    from fastapi.testclient import TestClient
 
     from postfach import api
     from postfach.app import create_app

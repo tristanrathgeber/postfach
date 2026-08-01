@@ -8,6 +8,7 @@ ohne echten macOS-Zugriff ersetzen können.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 
@@ -32,10 +33,9 @@ def _kr_delete(name: str) -> None:
     import keyring
     import keyring.errors
 
-    try:
+    # War nie gesetzt? Kein Fehler — das Ergebnis ist dasselbe.
+    with contextlib.suppress(keyring.errors.PasswordDeleteError):
         keyring.delete_password(_SERVICE, name)
-    except keyring.errors.PasswordDeleteError:
-        pass  # war nie gesetzt — kein Fehler
 
 
 def set_password(account_name: str, password: str) -> None:

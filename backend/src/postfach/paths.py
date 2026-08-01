@@ -7,6 +7,7 @@ Zwei getrennte Wurzeln, weil das Binary kein Repo hat:
 
 from __future__ import annotations
 
+import contextlib
 import os
 import sys
 from pathlib import Path
@@ -50,8 +51,6 @@ def user_data_root() -> Path:
         root = Path(tempfile.gettempdir()) / _APP_SUPPORT
     # Best Effort — die Stores legen ihre Verzeichnisse ohnehin lazy an
     # (mkdir parents=True); ein Fehler hier darf den Start nicht crashen.
-    try:
+    with contextlib.suppress(OSError):
         root.mkdir(parents=True, exist_ok=True)
-    except OSError:
-        pass
     return root

@@ -8,6 +8,7 @@ Endgültiges Entfernen vom Server gibt es hier nicht.
 
 from __future__ import annotations
 
+import contextlib
 import email
 import email.utils
 from dataclasses import dataclass, field
@@ -15,7 +16,10 @@ from email.policy import default as default_policy
 
 from email_agent.textutil import html_to_text
 
-_TRASH_NAMES = {"trash", "papierkorb", "gelöscht", "deleted items", "deleted messages", "gelöschte objekte", "geloeschte objekte"}
+_TRASH_NAMES = {
+    "trash", "papierkorb", "gelöscht", "deleted items", "deleted messages",
+    "gelöschte objekte", "geloeschte objekte",
+}
 _SENT_NAMES = {"sent", "sent items", "sent messages", "gesendet", "gesendete objekte", "gesendete elemente"}
 _ARCHIVE_NAMES = {"archive", "archiv", "all mail", "alle nachrichten"}
 _JUNK_NAMES = {"spam", "junk", "junk-e-mail", "spamverdacht", "werbung", "bulk mail"}
@@ -168,7 +172,7 @@ class Mailbox:
         self._sent_override = sent_folder
 
     @classmethod
-    def connect(cls, host: str, port: int, address: str, password: str, sent_folder: str | None = None) -> "Mailbox":
+    def connect(cls, host: str, port: int, address: str, password: str, sent_folder: str | None = None) -> Mailbox:
         from imapclient import IMAPClient
 
         client = IMAPClient(host, port=port, ssl=True)
@@ -176,10 +180,8 @@ class Mailbox:
         return cls(client, sent_folder=sent_folder)
 
     def logout(self) -> None:
-        try:
+        with contextlib.suppress(Exception):
             self._client.logout()
-        except Exception:
-            pass
 
     # --- Lesen ---
 

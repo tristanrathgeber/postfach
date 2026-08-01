@@ -8,6 +8,7 @@ Pfad-Ausbrüche wäre das ein Einfallstor.
 from __future__ import annotations
 
 import io
+import re
 import tarfile
 
 import pytest
@@ -31,7 +32,7 @@ class TestPickAsset:
         assert sha == "a" * 64  # ohne „sha256:"-Präfix
 
     def test_missing_asset_is_an_error(self):
-        with pytest.raises(OllamaSetupError, match="ollama-darwin.tgz"):
+        with pytest.raises(OllamaSetupError, match=re.escape("ollama-darwin.tgz")):
             os_mod.pick_asset(_release(name="ollama-linux.tgz"))
 
     def test_refuses_when_github_gives_no_checksum(self):

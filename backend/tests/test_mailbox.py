@@ -156,7 +156,7 @@ def test_trash_resolves_gmx_geloescht():
 def test_search_uses_imap_text_search():
     fake = FakeIMAP()
     Mailbox(fake).search("INBOX", "Rechnung Juli")
-    criteria = [c for c in fake.calls if c[0] == "search"][0][1]
+    criteria = next(c for c in fake.calls if c[0] == "search")[1]
     assert criteria == ["TEXT", "Rechnung Juli"]
 
 

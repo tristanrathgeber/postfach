@@ -10,13 +10,13 @@ import base64
 import email
 from dataclasses import replace
 from email.policy import default as default_policy
-
-from .mail_imap import AttachmentFile, AttachmentMeta, ParsedMail
+from typing import ClassVar
 
 # Echte, ansehbare Demo-Anhänge (gültige einseitige PDF-Rechnung + kleines PNG),
 # damit die Vorschau etwas zeigt. Base64 in _demo_assets (maschinell erzeugt,
 # nicht von Hand editieren).
 from ._demo_assets import PDF_B64, PNG_B64
+from .mail_imap import AttachmentFile, AttachmentMeta, ParsedMail
 
 _PDF = base64.b64decode(PDF_B64)
 _PNG = base64.b64decode(PNG_B64)
@@ -242,7 +242,7 @@ class DemoMailbox:
 class DemoEmiliaLLM:
     """Deterministische Emilia-Antworten ohne Ollama (Demo-Modus)."""
 
-    _NL_STOPWORDS = {"zeig", "zeige", "mir", "alle", "mails", "mail", "emails", "die", "der", "das", "bitte"}
+    _NL_STOPWORDS: ClassVar[set[str]] = {"zeig", "zeige", "mir", "alle", "mails", "mail", "emails", "die", "der", "das", "bitte"}
 
     def complete(self, system: str, prompt: str, purpose: str) -> str:
         if purpose == "improve":
@@ -300,7 +300,7 @@ def demo_classify(mails: list[ParsedMail]) -> dict[int, dict]:
         haystack = (m.subject + " " + m.from_addr + " " + m.body_text).lower()
         newsletter = bool(bulk_signals(to_agent_message(m)))
         interesting = newsletter and any(k in haystack for k in ("3d", "print", "maker"))
-        needs_reply = not newsletter and ("?" in m.body_text and "@web." in m.from_addr or "können sie" in haystack)
+        needs_reply = not newsletter and (("?" in m.body_text and "@web." in m.from_addr) or "können sie" in haystack)
         if any(k in haystack for k in ("github", "vercel", "deploy")):
             category = "Entwicklung"
         elif newsletter:

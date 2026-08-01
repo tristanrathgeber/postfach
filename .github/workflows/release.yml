@@ -20,6 +20,13 @@ jobs:
         with:
           repository: tristanrathgeber/email-agent
           path: email-agent
+      # email-agent hat keine Tags — statt eine SHA fest einzutragen (die
+      # jemand pflegen muesste) wird der tatsaechlich gebaute Stand im Release
+      # vermerkt. Damit bleibt nachvollziehbar, woraus ein Artefakt entstand.
+      - name: Stand von email-agent festhalten
+        id: agent
+        working-directory: email-agent
+        run: echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
       - uses: astral-sh/setup-uv@v5
       - uses: actions/setup-node@v5
         with:
@@ -30,15 +37,20 @@ jobs:
       - name: Installations-Image bauen (DMG)
         working-directory: postfach
         run: ./scripts/make_dmg.sh
+      # Die App ist unsigniert — eine veroeffentlichte Pruefsumme ist damit der
+      # einzige Weg, einen Download zu verifizieren.
+      - name: Pruefsumme erzeugen
+        working-directory: postfach/dist
+        run: shasum -a 256 Postfach-*.dmg > SHA256SUMS.txt && cat SHA256SUMS.txt
       - name: GitHub-Release mit Installer
         working-directory: postfach
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
+          AGENT_SHA: ${{ steps.agent.outputs.sha }}
         run: |
-          gh release create "$TAG" dist/Postfach-*.dmg \
-            --title "Postfach $TAG" \
-            --notes "$(cat <<'NOTES'
+          NOTES_FILE="$(mktemp)"
+          cat > "$NOTES_FILE" <<'NOTES'
           **Oeffentliche Beta.** Laeuft, ist aber junge Software — Rueckmeldungen willkommen.
 
           ## Installieren
@@ -65,5 +77,19 @@ jobs:
           - KI-Funktionen brauchen ein lokal laufendes [Ollama](https://ollama.com). Ohne Ollama ist
             Postfach ein normaler Mail-Client. Mit Ollama: ⌘K -> „Modell-Assistent" laedt das
             passende Modell fuer deinen Mac in einem Klick.
+
+          ## Download pruefen
+
+          Die App ist unsigniert — deshalb liegt `SHA256SUMS.txt` bei. So vergleichst du:
+
+          ```
+          shasum -a 256 -c SHA256SUMS.txt
+          ```
+
           NOTES
-          )"
+          # Dynamische Angaben getrennt anhaengen — im zitierten Heredoc oben
+          # wuerde $TAG woertlich stehen bleiben.
+          printf '\nGebaut aus Postfach `%s` und email-agent `%s`.\n' "$TAG" "$AGENT_SHA" >> "$NOTES_FILE"
+          gh release create "$TAG" dist/Postfach-*.dmg dist/SHA256SUMS.txt \
+            --title "Postfach $TAG" \
+            --notes-file "$NOTES_FILE"

@@ -196,12 +196,12 @@ def test_llm_down_returns_502_not_500(client):
 
 def test_thread_texts_keeps_newest_mails():
     """30er-Deckel darf nicht ausgerechnet die NEUESTEN Mails verwerfen."""
+    import tempfile
     from dataclasses import replace
+    from pathlib import Path
 
     from postfach.demo import _mail
     from postfach.search import SearchIndex
-    import tempfile
-    from pathlib import Path
 
     with tempfile.TemporaryDirectory() as tmp:
         index = SearchIndex(Path(tmp) / "s.db")

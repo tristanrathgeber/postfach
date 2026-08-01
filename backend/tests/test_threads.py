@@ -166,7 +166,7 @@ def test_messages_carry_thread_count(client):
 def test_subject_fallback_works_within_single_add(index):
     # Voll-Index: EIN add_mails-Aufruf, UID-absteigend (wie list_messages liefert) —
     # die kaputte Antwort muss ihre Wurzel trotzdem finden.
-    frage, antwort, *_ = _thread_mails()
+    frage, _antwort, *_ = _thread_mails()
     broken = replace(
         _mail(25, "AW: Vereinsheim Schlüssel", "Martin Becker", "m.becker@web.example", "PS!"),
         message_id="<vh-broken@web.example>", references="",
@@ -197,7 +197,6 @@ def test_reindex_keeps_fallback_root(index):
 
 def test_fallback_counterparty_is_token_matched(index):
     # a@x.de ist SUBSTRING von petra@x.de — darf aber nicht andocken.
-    from postfach.mail_imap import ParsedMail
     from dataclasses import replace as rep
 
     an_petra = replace(

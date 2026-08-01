@@ -118,6 +118,6 @@ def build_invite_reply_ics(calendar_raw: str, attendee_email: str, response: str
     attendee = vCalAddress(f"mailto:{attendee_email}")
     attendee.params["PARTSTAT"] = vText(partstat)
     event.add("attendee", attendee, encode=0)
-    event.add("dtstamp", _dt.datetime.now(_dt.timezone.utc))
+    event.add("dtstamp", _dt.datetime.now(_dt.UTC))
     reply.add_component(event)
     return reply.to_ical()

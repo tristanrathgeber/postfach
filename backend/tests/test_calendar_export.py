@@ -5,7 +5,6 @@ import pytest
 from postfach.extract import extract_entities
 from postfach.invites import build_invite_reply_ics, parse_invite
 
-
 _INVITE_ICS = """BEGIN:VCALENDAR
 PRODID:-//Test//EN
 VERSION:2.0
@@ -167,8 +166,9 @@ def test_export_returns_markdown(client):
 def test_export_yaml_valid_with_backslash():
     """Backslash im Betreff/Absender (angreiferkontrollierter Display-Name)
     darf das YAML-Frontmatter nicht zerbrechen."""
-    import yaml as _yaml
     from dataclasses import replace
+
+    import yaml as _yaml
 
     from postfach.demo import _mail
     from postfach.mdexport import to_markdown

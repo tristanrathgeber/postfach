@@ -1,5 +1,7 @@
 """Zeit-Warteschlange: Store, Scheduler-Kern (synchron), Outbox-Payloads."""
 
+from datetime import UTC
+
 import pytest
 
 from postfach.schedule import OutboxStore, Scheduler, ScheduleStore
@@ -289,10 +291,12 @@ def test_all_kinds_stop_retrying_after_max_attempts(store, outbox):
 
 
 def test_store_rejects_invalid_due():
+    import pathlib
+    import tempfile
+
     import pytest as _pytest
 
     from postfach.schedule import ScheduleStore
-    import tempfile, pathlib
 
     store = ScheduleStore(pathlib.Path(tempfile.mkdtemp()) / "s.json")
     with _pytest.raises(ValueError):
@@ -346,14 +350,14 @@ def test_followup_check_handles_timezone_offsets():
     # Follow-up-Zeit (aus datetime.now()) verglichen werden — die Antwortzeiten
     # aus der Referenz ableiten, damit der Test in JEDER Zeitzone stimmt
     # (fest kodierte Offsets bestanden nur auf UTC+2-Rechnern, nicht im UTC-CI).
-    from datetime import datetime, timedelta, timezone
+    from datetime import datetime, timedelta
 
     from postfach.schedule import is_later
 
     reference = datetime.now().replace(microsecond=0)  # naive lokale Wanduhr
     instant = reference.astimezone()  # als lokaler Zeitpunkt interpretiert
-    reply_after = (instant + timedelta(minutes=30)).astimezone(timezone.utc).isoformat()
-    reply_before = (instant - timedelta(minutes=30)).astimezone(timezone.utc).isoformat()
+    reply_after = (instant + timedelta(minutes=30)).astimezone(UTC).isoformat()
+    reply_before = (instant - timedelta(minutes=30)).astimezone(UTC).isoformat()
 
     assert is_later(reply_after, reference.isoformat())
     assert not is_later(reply_before, reference.isoformat())
