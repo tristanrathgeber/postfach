@@ -36,10 +36,11 @@ but expect rough edges.
 - **macOS only**, and the released binary is **Apple Silicon (M1 or newer)**.
   Intel Macs have to [build from source](#build-from-source). Minimum macOS
   version: **12.0 (Monterey)**.
-- **The app is German.** UI, error messages and the manual
-  ([**docs/HANDBUCH.md**](docs/HANDBUCH.md) — every function explained, from
-  first steps to every keyboard shortcut) are German. This README is the only
-  English part; there is no English UI yet.
+- **The app is German.** UI, error messages and the manual are German — see the
+  [**Wiki**](https://github.com/tristanrathgeber/postfach/wiki), which explains
+  every function from first steps to every keyboard shortcut (same content as
+  [`docs/HANDBUCH.md`](docs/HANDBUCH.md), just navigable). This README is the
+  only English part; there is no English UI yet.
 - **The app is unsigned** — there's no paid Apple developer account behind it —
   so macOS refuses the first launch. Two clicks fix it, see
   [Install](#install-as-a-mac-app).
