@@ -25,19 +25,33 @@ jobs:
     name: Claude prueft den PR
     runs-on: ubuntu-latest
     steps:
-      # Ohne hinterlegten Schluessel soll der Lauf still uebersprungen werden,
-      # statt jeden PR mit einem roten Kreuz zu versehen. Der Wert wird ueber
-      # env gelesen und nie in einen Befehl interpoliert.
-      - name: Schluessel vorhanden?
+      # Zwei Wege, sich anzumelden — der guenstigere zuerst:
+      #
+      #   CLAUDE_CODE_OAUTH_TOKEN  laeuft ueber ein bestehendes Claude-Abo
+      #                            (Pro/Max), also OHNE Zusatzkosten pro Review.
+      #                            Erzeugen: `claude setup-token` lokal.
+      #   ANTHROPIC_API_KEY        rechnet pro Token ueber den API-Account ab.
+      #
+      # Ist keiner von beiden hinterlegt (oder kommt der PR aus einem Fork, wo
+      # GitHub grundsaetzlich keine Secrets herausgibt), wird still
+      # uebersprungen statt jeden PR mit einem roten Kreuz zu versehen.
+      # Die Werte werden ueber env gelesen und nie in einen Befehl interpoliert.
+      - name: Anmeldung vorhanden?
         id: key
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OAUTH: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          APIKEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          if [ -n "$ANTHROPIC_API_KEY" ]; then
+          if [ -n "$OAUTH" ]; then
             echo "vorhanden=ja" >> "$GITHUB_OUTPUT"
+            echo "Abo-Token gefunden (keine Zusatzkosten pro Review)."
+          elif [ -n "$APIKEY" ]; then
+            echo "vorhanden=ja" >> "$GITHUB_OUTPUT"
+            echo "API-Schluessel gefunden (Abrechnung pro Token)."
           else
             echo "vorhanden=nein" >> "$GITHUB_OUTPUT"
-            echo "Kein ANTHROPIC_API_KEY hinterlegt (oder PR aus einem Fork) — Review wird uebersprungen."
+            echo "Weder CLAUDE_CODE_OAUTH_TOKEN noch ANTHROPIC_API_KEY hinterlegt"
+            echo "(oder PR aus einem Fork) — Review wird uebersprungen."
           fi
 
       - uses: actions/checkout@v4
@@ -49,6 +63,9 @@ jobs:
         if: steps.key.outputs.vorhanden == 'ja'
         uses: anthropics/claude-code-action@v1
         with:
+          # Beide angeben ist unschaedlich: leere Werte werden ignoriert, und
+          # der Abo-Token hat Vorrang, wenn er gesetzt ist.
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude_args: "--max-turns 12"
           # Projektspezifisch statt generisch: die Punkte unten sind genau die,
