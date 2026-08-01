@@ -63,6 +63,19 @@ im Bestand, etwa in `backend/src/postfach/paths.py` oder `sanitize.py`.
 
 ## Pull Requests
 
+`main` ist geschützt — es wird nichts direkt hineingeschoben. Der Weg für
+Beiträge von außen:
+
+1. Repository **forken** (Knopf oben rechts auf GitHub).
+2. Im Fork einen Branch anlegen, z. B. `fix/anhang-vorschau-pdf`.
+3. Ändern, Tests grün halten, committen.
+4. **Pull Request** gegen `main` öffnen.
+
+Danach läuft die CI (Backend- und Frontend-Tests müssen grün sein), und der
+Maintainer sieht sich den PR an. Gemergt wird per **Squash** — ein PR wird also
+zu einem Commit in `main`; der Branch wird danach automatisch gelöscht. Die
+Entscheidung, was in `main` landet, liegt beim Maintainer.
+
 - Kleine, thematisch geschlossene Commits.
 - Was du geändert hast und warum — kurz, aber nachvollziehbar.
 - Wenn du ein Verhalten änderst, das im Handbuch (`docs/HANDBUCH.md`) steht:
