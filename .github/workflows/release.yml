@@ -27,7 +27,7 @@ jobs:
         id: agent
         working-directory: email-agent
         run: echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
       - uses: actions/setup-node@v5
         with:
           node-version: '22'
