@@ -55,7 +55,7 @@ jobs:
             echo "(oder PR aus einem Fork) — Review wird uebersprungen."
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.key.outputs.vorhanden == 'ja'
         with:
           fetch-depth: 0   # Claude soll den Verlauf sehen, nicht nur den Kopf
