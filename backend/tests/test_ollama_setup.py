@@ -8,6 +8,7 @@ Pfad-Ausbrüche wäre das ein Einfallstor.
 from __future__ import annotations
 
 import io
+import json
 import re
 import tarfile
 
@@ -181,3 +182,55 @@ class TestInstallGuards:
         with pytest.raises(OllamaSetupError, match="Prüfsumme"):
             os_mod.install(tmp_path)
         assert old.read_text() == "alt", "alte Installation überlebt einen fehlgeschlagenen Versuch"
+
+
+class TestInstallRoute:
+    """Der Zusammenbau in api.py (POST /ollama/install) — die Bausteine oben sind
+    einzeln getestet, hier der ganze Ablauf: Demo-Sperre, NDJSON-Fortschritt,
+    Erfolgs- und Fehlerfall."""
+
+    def _client(self, tmp_path):
+        from fastapi.testclient import TestClient
+
+        from postfach.app import create_app
+
+        return TestClient(create_app(root=tmp_path, demo=False, mailbox_factory=lambda a: None))
+
+    def test_blocked_in_demo(self, tmp_path):
+        from fastapi.testclient import TestClient
+
+        from postfach.app import create_app
+
+        c = TestClient(create_app(root=tmp_path, demo=True))
+        assert c.post("/api/ollama/install").status_code == 403
+
+    def test_streams_progress_and_reports_reachable(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            os_mod, "install",
+            lambda root, progress=None: progress(50, 100, "lädt herunter"),
+        )
+        monkeypatch.setattr(os_mod, "start_server", lambda root, base_url: None)
+        monkeypatch.setattr(os_mod, "server_reachable", lambda base_url, timeout=1.5: True)
+
+        with self._client(tmp_path).stream("POST", "/api/ollama/install") as r:
+            assert r.status_code == 200
+            assert r.headers["content-type"].startswith("application/x-ndjson")
+            events = [json.loads(line) for line in r.iter_lines() if line]
+
+        assert {"done": 50, "total": 100, "status": "lädt herunter"} in events
+        assert events[-1] == {"done_all": True, "reachable": True}
+
+    def test_setup_error_lands_as_event_not_a_crash(self, tmp_path, monkeypatch):
+        """Ein Download- oder Prüfsummenfehler beendet den Stream mit einer
+        Fehlermeldung — der Hintergrund-Thread darf die App nicht mitreißen."""
+
+        def _boom(root, progress=None):
+            raise OllamaSetupError("Prüfsumme stimmt nicht")
+
+        monkeypatch.setattr(os_mod, "install", _boom)
+
+        with self._client(tmp_path).stream("POST", "/api/ollama/install") as r:
+            assert r.status_code == 200
+            events = [json.loads(line) for line in r.iter_lines() if line]
+
+        assert events == [{"error": "Prüfsumme stimmt nicht"}]

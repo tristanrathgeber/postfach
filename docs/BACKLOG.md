@@ -13,13 +13,6 @@ steht, wird bevorzugt angefasst.
 
 ### Auslieferung & Betrieb
 
-- **Testwerkzeug wandert ins Bundle.** `pytest`, `setuptools`, `pluggy`,
-  `iniconfig`, `Pygments` und `packaging` landen im ausgelieferten
-  `Postfach.app`, obwohl sie nur zum Testen gebraucht werden. Kein
-  Lizenzproblem (alle MIT/BSD, in `THIRD-PARTY-LICENSES.md` erfasst), aber
-  unnötiger Ballast im Download. Über `excludes` in `postfach.spec` entfernen —
-  danach unbedingt prüfen, dass die App noch startet (der macOS-Job in der CI
-  macht genau das).
 - **Intel-Macs bleiben außen vor.** Der Release ist arm64-only. Ein
   `universal2`-Build oder ein zweiter Job wäre möglich; ehrlich abwägen, ob
   sich das für die Nutzerzahl lohnt.
@@ -29,8 +22,6 @@ steht, wird bevorzugt angefasst.
 - **Frontend-Tests decken vor allem Hilfsfunktionen ab.** Es fehlen Tests, die
   Komponenten wirklich rendern (React Testing Library) — etwa für die
   Anhang-Vorschau (Tastenabschirmung, Blättern) oder den Composer.
-- **Kein Test für den Ollama-Einrichtungspfad Ende-zu-Ende.** Die Bausteine
-  sind getestet, der Zusammenbau in `api.py` (`/ollama/install`) nicht.
 
 ### Funktionen
 
@@ -51,6 +42,13 @@ steht, wird bevorzugt angefasst.
 
 ## Erledigt
 
+- Testwerkzeug (`pytest`, `setuptools`, `pluggy`, `iniconfig`, `pygments`,
+  `packaging`) per `excludes` aus `postfach.spec` aus dem gebauten
+  `Postfach.app` entfernt — landete nur transitiv über `collect_all()` im
+  Bundle, keiner der Pakete wird vom Backend zur Laufzeit importiert.
+- Ende-zu-Ende-Tests für den Ollama-Einrichtungspfad (`POST /ollama/install`):
+  Demo-Sperre, NDJSON-Fortschritt bis „erreichbar", Fehlerfall landet als
+  Event statt als Absturz des Hintergrund-Threads.
 - Sicherheit: Schutz gegen DNS-Rebinding (Host-/Origin-Prüfung)
 - Kein Doppelversand mehr (zweiphasiger Versand, Backoff, Wiederholen)
 - Live-Push auch für per Oberfläche angelegte Konten
