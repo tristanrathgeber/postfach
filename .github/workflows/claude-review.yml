@@ -15,6 +15,7 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  id-token: write           # von der Action verlangt (OIDC)
 
 concurrency:
   group: claude-review-${{ github.event.pull_request.number }}

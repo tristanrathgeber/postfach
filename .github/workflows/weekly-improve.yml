@@ -28,6 +28,7 @@ on:
 permissions:
   contents: write           # Branch anlegen und pushen
   pull-requests: write      # Entwurfs-PR oeffnen
+  id-token: write           # von der Action verlangt (OIDC) — ohne das bricht sie ab
 
 concurrency:
   group: weekly-improve
