@@ -45,7 +45,13 @@ a = Analysis(
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
-    excludes=["tkinter", "PyInstaller"],
+    # Diese Pakete werden von collect_all() transitiv mitgezogen (via pytest/
+    # PyInstaller selbst als Dev-Abhaengigkeiten), aber vom Backend zur
+    # Laufzeit nirgends importiert — reiner Ballast im Bundle.
+    excludes=[
+        "tkinter", "PyInstaller",
+        "pytest", "setuptools", "pluggy", "iniconfig", "pygments", "packaging",
+    ],
     noarchive=False,
 )
 pyz = PYZ(a.pure)
