@@ -81,10 +81,12 @@ jobs:
           #
           # --allowedTools ist noetig: ohne das gibt es kein Bash, und der
           # Reviewer kann den Diff gar nicht ansehen (erster Lauf: 5 Schritte,
-          # 2 Ablehnungen, kein Kommentar). BEWUSST nur LESENDE Werkzeuge —
+          # 2 Ablehnungen, kein Kommentar). 30 statt 12 Schritte, weil der
+          # Reviewer den Diff jetzt wirklich durchgeht und bei 12 abbrach.
+          # BEWUSST nur LESENDE Werkzeuge —
           # kein Edit/Write: ein Reviewer kommentiert, er aendert nichts.
           claude_args: >-
-            --max-turns 12
+            --max-turns 30
             --model claude-sonnet-5
             --allowedTools "Bash,Read,Glob,Grep"
           # Projektspezifisch statt generisch: die Punkte unten sind genau die,
