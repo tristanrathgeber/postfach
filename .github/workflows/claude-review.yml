@@ -66,6 +66,12 @@ jobs:
         # darf sich nicht aendern, weil sich anderswo ein Tag verschiebt.
         uses: anthropics/claude-code-action@be7b93b1907a4abad570368f3c74b6fe3807510b  # v1, Stand 2026-07-25
         with:
+          # Der Wochen-Agent oeffnet seine PRs als Bot; ohne diesen Eintrag
+          # verweigert die Action den Lauf ("Workflow initiated by non-human
+          # actor"). BEWUSST nur „claude" statt „*": mit Sternchen koennten auf
+          # einem oeffentlichen Repo fremde Apps die Action mit selbst
+          # gewaehlten Prompts ausloesen.
+          allowed_bots: "claude"
           # Beide angeben ist unschaedlich: leere Werte werden ignoriert, und
           # der Abo-Token hat Vorrang, wenn er gesetzt ist.
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
