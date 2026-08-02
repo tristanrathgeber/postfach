@@ -69,7 +69,9 @@ jobs:
           # der Abo-Token hat Vorrang, wenn er gesetzt ist.
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude_args: "--max-turns 12"
+          # Explizit gesetzt statt Standard, damit die Kosten vorhersehbar
+          # bleiben. Fuer schaerfere Reviews hier auf claude-opus-5 stellen.
+          claude_args: "--max-turns 12 --model claude-sonnet-5"
           # Projektspezifisch statt generisch: die Punkte unten sind genau die,
           # an denen dieses Projekt in der Vergangenheit echte Fehler hatte.
           prompt: |
