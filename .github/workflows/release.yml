@@ -12,11 +12,11 @@ jobs:
     runs-on: macos-14
     steps:
       - name: Checkout postfach
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: postfach
       - name: Checkout email-agent
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: tristanrathgeber/email-agent
           path: email-agent

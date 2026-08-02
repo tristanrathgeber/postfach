@@ -56,7 +56,7 @@ jobs:
 
       - name: Checkout postfach
         if: steps.key.outputs.vorhanden == 'ja'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: postfach
           fetch-depth: 0     # der Agent soll den Verlauf sehen
@@ -65,7 +65,7 @@ jobs:
       # laufen die Tests nicht, die der Agent gruen bekommen muss.
       - name: Checkout email-agent
         if: steps.key.outputs.vorhanden == 'ja'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           repository: tristanrathgeber/email-agent
           path: email-agent
