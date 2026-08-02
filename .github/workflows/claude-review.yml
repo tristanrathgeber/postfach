@@ -61,7 +61,9 @@ jobs:
 
       - name: Review
         if: steps.key.outputs.vorhanden == 'ja'
-        uses: anthropics/claude-code-action@v1
+        # Auf einen Commit festgenagelt statt @v1: ein unbeaufsichtigter Agent
+        # darf sich nicht aendern, weil sich anderswo ein Tag verschiebt.
+        uses: anthropics/claude-code-action@be7b93b1907a4abad570368f3c74b6fe3807510b  # v1, Stand 2026-07-25
         with:
           # Beide angeben ist unschaedlich: leere Werte werden ignoriert, und
           # der Abo-Token hat Vorrang, wenn er gesetzt ist.
