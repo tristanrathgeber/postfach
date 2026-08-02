@@ -64,6 +64,9 @@ jobs:
         if: steps.key.outputs.vorhanden == 'ja'
         # Auf einen Commit festgenagelt statt @v1: ein unbeaufsichtigter Agent
         # darf sich nicht aendern, weil sich anderswo ein Tag verschiebt.
+        env:
+          # Ueber env statt ${{ }} im Prompt — der Wert bleibt Daten.
+          PR_NUM: ${{ github.event.pull_request.number }}
         uses: anthropics/claude-code-action@be7b93b1907a4abad570368f3c74b6fe3807510b  # v1, Stand 2026-07-25
         with:
           # Der Wochen-Agent oeffnet seine PRs als Bot; ohne diesen Eintrag
@@ -128,3 +131,12 @@ jobs:
             Sei knapp und konkret: Datei, Zeile, was schiefgehen kann. Nenne
             keine Stilfragen, wenn es inhaltliche Funde gibt. Ist der PR in
             Ordnung, sag das in zwei Saetzen — erfinde keine Beanstandungen.
+
+            VEROEFFENTLICHEN — sonst liest dein Ergebnis niemand: Die Action
+            legt bei eigenem Prompt KEINEN Kommentar an. Schreibe dein Ergebnis
+            deshalb selbst an den PR:
+
+              gh pr comment "$PR_NUM" --body "<dein Review>"
+
+            Nutze eine Datei fuer den Text (gh pr comment --body-file), wenn er
+            Sonderzeichen enthaelt. Beginne den Kommentar mit „## KI-Review".
