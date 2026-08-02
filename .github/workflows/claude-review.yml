@@ -76,9 +76,17 @@ jobs:
           # der Abo-Token hat Vorrang, wenn er gesetzt ist.
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          # Explizit gesetzt statt Standard, damit die Kosten vorhersehbar
-          # bleiben. Fuer schaerfere Reviews hier auf claude-opus-5 stellen.
-          claude_args: "--max-turns 12 --model claude-sonnet-5"
+          # Modell explizit statt Standard, damit die Kosten vorhersehbar
+          # bleiben. Fuer schaerfere Reviews auf claude-opus-5 stellen.
+          #
+          # --allowedTools ist noetig: ohne das gibt es kein Bash, und der
+          # Reviewer kann den Diff gar nicht ansehen (erster Lauf: 5 Schritte,
+          # 2 Ablehnungen, kein Kommentar). BEWUSST nur LESENDE Werkzeuge —
+          # kein Edit/Write: ein Reviewer kommentiert, er aendert nichts.
+          claude_args: >-
+            --max-turns 12
+            --model claude-sonnet-5
+            --allowedTools "Bash,Read,Glob,Grep"
           # Projektspezifisch statt generisch: die Punkte unten sind genau die,
           # an denen dieses Projekt in der Vergangenheit echte Fehler hatte.
           prompt: |
