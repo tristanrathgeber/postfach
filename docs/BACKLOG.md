@@ -26,9 +26,9 @@ steht, wird bevorzugt angefasst.
 
 ### Qualität
 
-- **Frontend-Tests decken vor allem Hilfsfunktionen ab.** Es fehlen Tests, die
-  Komponenten wirklich rendern (React Testing Library) — etwa für die
-  Anhang-Vorschau (Tastenabschirmung, Blättern) oder den Composer.
+- **Frontend-Tests decken vor allem Hilfsfunktionen ab.** Die Anhang-Vorschau
+  hat jetzt echte Render-Tests (React Testing Library, siehe Erledigt); dem
+  Composer und den übrigen Dialogen fehlen sie weiterhin.
 - **Kein Test für den Ollama-Einrichtungspfad Ende-zu-Ende.** Die Bausteine
   sind getestet, der Zusammenbau in `api.py` (`/ollama/install`) nicht.
 
@@ -51,6 +51,9 @@ steht, wird bevorzugt angefasst.
 
 ## Erledigt
 
+- Anhang-Vorschau: echte Render-Tests (React Testing Library) für
+  Tastenabschirmung gegenüber globalen Kürzeln, Blättern zwischen mehreren
+  Anhängen und die drei Schließwege (Esc, Rand-Klick, Overlay-Zähler)
 - Sicherheit: Schutz gegen DNS-Rebinding (Host-/Origin-Prüfung)
 - Kein Doppelversand mehr (zweiphasiger Versand, Backoff, Wiederholen)
 - Live-Push auch für per Oberfläche angelegte Konten
