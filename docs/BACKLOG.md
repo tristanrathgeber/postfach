@@ -26,9 +26,6 @@ steht, wird bevorzugt angefasst.
 
 ### Qualität
 
-- **Frontend-Tests decken vor allem Hilfsfunktionen ab.** Es fehlen Tests, die
-  Komponenten wirklich rendern (React Testing Library) — etwa für die
-  Anhang-Vorschau (Tastenabschirmung, Blättern) oder den Composer.
 - **Kein Test für den Ollama-Einrichtungspfad Ende-zu-Ende.** Die Bausteine
   sind getestet, der Zusammenbau in `api.py` (`/ollama/install`) nicht.
 
@@ -59,3 +56,6 @@ steht, wird bevorzugt angefasst.
 - Protokolldatei, Diagnose-Endpunkt, Fehlerfenster beim Start
 - Nutzerdaten liegen außerhalb des Repos
 - CI: Linting, macOS-Build mit Rauchtest, CodeQL, Dependabot, Doku-Prüfung
+- Frontend: erste echte Komponenten-Tests (React Testing Library) für den
+  Composer — Doppel-Klick-Bestätigung beim Senden, Esc-Bestätigung beim
+  Schließen ungespeicherter Entwürfe, Anhänge (hinzufügen/entfernen, 25-MB-Limit)
