@@ -228,7 +228,7 @@ def test_invite_respond_rejects_multi_organizer(client):
 
     from postfach import demo
 
-    bad_ics = demo._DEMO_INVITE_ICS.replace(
+    bad_ics = demo._demo_invite_ics().replace(
         "ORGANIZER;CN=Petra Meyer:mailto:petra@sfcnahetal.example",
         "ORGANIZER:mailto:petra@sfcnahetal.example, attacker@evil.example",
     )

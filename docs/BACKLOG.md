@@ -37,6 +37,13 @@ steht, wird bevorzugt angefasst.
 - **Termine-Übersicht.** Postfach erkennt bereits Termin-Daten in Mails
   (`extract.py`, Chips im Reader). Daraus ließe sich eine Ansicht „was steht
   an?" bauen — die Frage, an der die reine Chat-Suche scheitert.
+  Beim Draufschauen: `extract.py`s `kind: "date"` ist reiner Text-Regex-Treffer
+  (kein echtes Datum, kein Titel/Ort, viel Rauschen aus Rechnungsfristen o.ä.)
+  und nicht persistiert — für eine Übersicht besser auf `invites.py`
+  (`parse_invite`, echte ICS-Termine mit `start`/`summary`/`location`)
+  aufbauen. Dafür müsste `calendar_raw` erst im Such-Index landen (aktuell
+  nur zur Laufzeit aus IMAP gelesen) — Migration + Backfill wie bei den
+  Thread-Spalten in `search.py`.
 - **Mehrsprachigkeit.** Oberfläche und Handbuch sind deutsch. Englisch würde
   die Reichweite deutlich erhöhen, ist aber ein großer, sorgfältiger Umbau
   (Textkatalog statt verstreuter Strings).
@@ -51,6 +58,11 @@ steht, wird bevorzugt angefasst.
 
 ## Erledigt
 
+- Demo-Modus: Beispieldaten hingen an einem festen Kalendertag
+  („2026-07-19") statt an der echten Uhrzeit — nach ein paar Wochen fiel der
+  Erstkontakt (Sabine Krause) aus dem 30-Tage-Fenster des Screeners und die
+  Demo-Termine lagen für immer in der Vergangenheit. Jetzt an `datetime.now()`
+  gekoppelt.
 - Sicherheit: Schutz gegen DNS-Rebinding (Host-/Origin-Prüfung)
 - Kein Doppelversand mehr (zweiphasiger Versand, Backoff, Wiederholen)
 - Live-Push auch für per Oberfläche angelegte Konten
