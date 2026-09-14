@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import email
 from dataclasses import replace
+from datetime import datetime, timedelta
 from email.policy import default as default_policy
 from typing import ClassVar
 
@@ -28,6 +29,24 @@ _NEWSLETTER_HTML = (
 )
 
 
+def _anchor() -> datetime:
+    """"Heute" in der Demo-Erzählung — an die echte Uhrzeit gekoppelt statt an
+    ein festes Kalenderdatum. Sonst rutscht das Erstkontakt-Fenster des
+    Screeners (30 Tage, search.py:first_contacts) nach ein paar Wochen leer
+    und die Demo-Termine liegen für immer in der Vergangenheit."""
+    return datetime.now().replace(hour=9, minute=0, second=0, microsecond=0)
+
+
+def _iso(delta: timedelta = timedelta()) -> str:
+    return (_anchor() + delta).isoformat(timespec="seconds")
+
+
+def _appointment() -> datetime:
+    """Datum der beiden Demo-Termine (Vorstandssitzung, Prophylaxe) —
+    5 Tage nach dem Erzähl-"heute", damit sie immer in der Zukunft liegen."""
+    return _anchor() + timedelta(days=5)
+
+
 def _mail(uid, subject, from_name, from_addr, body, *, seen=True, html=None, headers=None, attachments=(), references="", date_iso=None, to=("alex@demo.example",), calendar_raw=None):
     return ParsedMail(
         uid=uid,
@@ -39,7 +58,7 @@ def _mail(uid, subject, from_name, from_addr, body, *, seen=True, html=None, hea
         reply_to=None,
         message_id=f"<demo-{uid}@demo.example>",
         references=references,
-        date_iso=date_iso or f"2026-07-19T09:{uid % 60:02d}:00+02:00",
+        date_iso=date_iso or _iso(timedelta(minutes=uid % 60)),
         seen=seen,
         body_text=body,
         body_html_raw=html,
@@ -49,16 +68,18 @@ def _mail(uid, subject, from_name, from_addr, body, *, seen=True, html=None, hea
     )
 
 
-_DEMO_INVITE_ICS = """BEGIN:VCALENDAR
+def _demo_invite_ics() -> str:
+    appt = _appointment()
+    return f"""BEGIN:VCALENDAR
 PRODID:-//Demo//DE
 VERSION:2.0
 METHOD:REQUEST
 BEGIN:VEVENT
-UID:demo-vorstand-2026@sfcnahetal.example
+UID:demo-vorstand@sfcnahetal.example
 SEQUENCE:0
 SUMMARY:Vorstandssitzung SFC Nahetal
-DTSTART:20260724T180000Z
-DTEND:20260724T193000Z
+DTSTART:{appt.strftime("%Y%m%dT180000Z")}
+DTEND:{appt.strftime("%Y%m%dT193000Z")}
 LOCATION:Vereinsheim, Nebenraum
 ORGANIZER;CN=Petra Meyer:mailto:petra@sfcnahetal.example
 ATTENDEE;CN=Alex;PARTSTAT=NEEDS-ACTION:mailto:alex@demo.example
@@ -73,11 +94,11 @@ def _sample_inbox() -> list[ParsedMail]:
         _mail(115, "Re: Vereinsheim Schlüssel", "Martin Becker", "m.becker@web.example",
               "Super, danke! Dann bis Samstag um 10.\nVG Martin",
               references="<demo-114@demo.example> <demo-11@demo.example>",
-              date_iso="2026-07-19T11:15:00+02:00"),
+              date_iso=_iso(timedelta(hours=2, minutes=15))),
         _mail(116, "Einladung: Vorstandssitzung SFC Nahetal", "Petra Meyer", "petra@sfcnahetal.example",
-              "Hallo Alex,\n\nanbei die Einladung zur Vorstandssitzung am 24.07. um 20:00 Uhr im "
+              f"Hallo Alex,\n\nanbei die Einladung zur Vorstandssitzung am {_appointment():%d.%m.} um 20:00 Uhr im "
               "Vereinsheim. Bitte kurz zu- oder absagen.\n\nViele Grüße\nPetra",
-              seen=False, calendar_raw=_DEMO_INVITE_ICS),
+              seen=False, calendar_raw=_demo_invite_ics()),
         _mail(114, "Vereinsheim Schlüssel", "Martin Becker", "m.becker@web.example",
               "Hi Alex, hast du den Schlüssel fürs Vereinsheim? Ich komme sonst nicht rein.\nVG Martin"),
         _mail(112, "3D Print Weekly #47 — PETG-CF im Härtetest", "3D Print Weekly", "newsletter@3dprintweekly.example",
@@ -98,8 +119,9 @@ def _sample_inbox() -> list[ParsedMail]:
               "dein-account merged 3 commits into main."),
         _mail(106, "Vereinsinfo: Sommerfest & Trainingszeiten", "SFC Nahetal", "info@sfcnahetal.example",
               "Liebe Mitglieder, das Sommerfest findet am 15.08. statt. Die Trainingszeiten in den Ferien…", seen=False),
-        _mail(105, "Terminbestätigung: Prophylaxe am 24.07., 14:30", "Zahnarztpraxis Dr. Weber", "praxis@drweber.example",
-              "Wir bestätigen Ihren Termin am 24.07.2026 um 14:30 Uhr."),
+        _mail(105, f"Terminbestätigung: Prophylaxe am {_appointment():%d.%m.}, 14:30",
+              "Zahnarztpraxis Dr. Weber", "praxis@drweber.example",
+              f"Wir bestätigen Ihren Termin am {_appointment():%d.%m.%Y} um 14:30 Uhr."),
         _mail(104, "Nur heute: 30 % auf Elektronik", "TechDeals", "sale@techdeals.example",
               "Blitzangebote! 30 % Rabatt auf Netzteile, Sensoren, Mikrocontroller.",
               headers={"list-unsubscribe": "<mailto:abmelden@techdeals.example?subject=unsubscribe>"}),
@@ -123,11 +145,11 @@ class DemoMailbox:
                 # Gesendet-Empfängern ab — Martin & Co. sind keine Erstkontakte.
                 _mail(11, "Re: Vereinsheim Schlüssel", "Alex", "alex@demo.example",
                       "Hi Martin,\n\nklar, ich bringe den Schlüssel mit.\n\nViele Grüße\nAlex",
-                      references="<demo-114@demo.example>", date_iso="2026-07-19T10:30:00+02:00",
+                      references="<demo-114@demo.example>", date_iso=_iso(timedelta(hours=1, minutes=30)),
                       to=("m.becker@web.example",)),
                 _mail(10, "Beleg Abschreibung Drucker", "Alex", "alex@demo.example",
                       "Guten Tag, anbei der Beleg zur Abschreibung.\n\nViele Grüße\nAlex Demo",
-                      date_iso="2026-07-15T09:00:00+02:00",
+                      date_iso=_iso(timedelta(days=-4)),
                       to=("kanzlei@sommer-stb.example",)),
             ],
             "Papierkorb": [],

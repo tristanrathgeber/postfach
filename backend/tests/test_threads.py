@@ -1,10 +1,11 @@
 """Konversations-Threads: Wurzel-Ableitung, kontoweiter Faden, Zähler, Fallback."""
 
 from dataclasses import replace
+from datetime import timedelta
 
 import pytest
 
-from postfach.demo import _mail
+from postfach.demo import _iso, _mail
 from postfach.search import SearchIndex, thread_root_for
 
 
@@ -22,13 +23,13 @@ def _thread_mails():
         _mail(21, "Re: Vereinsheim Schlüssel", "Alex", "alex@demo.example", "Klar, bringe ihn mit."),
         message_id="<vh-2@demo.example>",
         references="<vh-1@web.example>",
-        date_iso="2026-07-19T10:00:00+02:00",
+        date_iso=_iso(timedelta(hours=1)),
     )
     rueckfrage = replace(
         _mail(22, "Re: Vereinsheim Schlüssel", "Martin Becker", "m.becker@web.example", "Super, danke!"),
         message_id="<vh-3@web.example>",
         references="<vh-1@web.example> <vh-2@demo.example>",
-        date_iso="2026-07-19T11:00:00+02:00",
+        date_iso=_iso(timedelta(hours=2)),
     )
     solo = _mail(23, "Ganz was anderes", "Sabine", "s.krause@web.example", "Unabhängige Mail")
     return frage, antwort, rueckfrage, solo

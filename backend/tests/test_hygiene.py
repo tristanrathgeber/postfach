@@ -29,6 +29,20 @@ def test_parse_empty():
     assert parsed.https is None and parsed.mailto is None
 
 
+# --- Demo-Daten: an echte Zeit gekoppelt, nicht an ein festes Kalenderdatum ---
+
+
+def test_demo_mail_date_stays_recent():
+    """Ein fest verdrahtetes Datum (z. B. "2026-07-19") würde den Screener
+    nach ein paar Wochen aus dem 30-Tage-Fenster laufen lassen — siehe
+    test_screener_lists_first_contacts_with_suggestion."""
+    from datetime import datetime
+
+    mail = _mail(1, "Test", "A", "a@x.de", "Body")
+    age = datetime.now().astimezone() - datetime.fromisoformat(mail.date_iso).astimezone()
+    assert age.days < 1
+
+
 # --- Index: Abos + is_sent ---
 
 
