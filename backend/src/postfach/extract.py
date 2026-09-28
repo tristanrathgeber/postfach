@@ -33,15 +33,18 @@ _DATE_RE = re.compile(
 _TIME_RE = re.compile(r"\b\d{1,2}:\d{2}(?:\s*Uhr)?\b")
 
 # Sendungsnummern (bekannte Anbieter-Muster) → (Regex, Tracking-URL-Template)
+# Reihenfolge zählt: dpd (0 + 13 Ziffern) ist eine echte Teilmenge von hermes
+# (14 beliebige Ziffern) — muss davor stehen, sonst gewinnt beim Dedupe in
+# _emit() immer der zuerst gefundene (falsche) Hermes-Treffer.
 _TRACKING = [
     ("ups", re.compile(r"\b1Z[0-9A-Z]{16}\b"),
      "https://www.ups.com/track?tracknum={n}"),
     ("dhl", re.compile(r"\bJJD\d{16,18}\b|\b\d{20}\b"),
      "https://www.dhl.de/de/privatkunden/pakete-empfangen/verfolgen.html?piececode={n}"),
-    ("hermes", re.compile(r"\b\d{14}\b"),
-     "https://www.myhermes.de/empfangen/sendungsverfolgung/sendungsinformation/#{n}"),
     ("dpd", re.compile(r"\b0\d{13}\b"),
      "https://tracking.dpd.de/status/de_DE/parcel/{n}"),
+    ("hermes", re.compile(r"\b\d{14}\b"),
+     "https://www.myhermes.de/empfangen/sendungsverfolgung/sendungsinformation/#{n}"),
 ]
 
 
