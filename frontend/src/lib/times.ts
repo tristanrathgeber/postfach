@@ -24,7 +24,9 @@ export function timePresets(now = new Date()): TimePreset[] {
   saturday.setDate(now.getDate() + ((6 - now.getDay() + 7) % 7 || 7))
   presets.push({ id: 'saturday', label: 'Samstag 09:00', iso: iso(at(saturday, 9)) })
   const monday = new Date(now)
-  monday.setDate(now.getDate() + ((1 - now.getDay() + 7) % 7 || 7))
+  let mondayOffset = (1 - now.getDay() + 7) % 7 || 7
+  if (mondayOffset === 1) mondayOffset += 7 // sonst identisch mit "tomorrow" (an Sonntagen)
+  monday.setDate(now.getDate() + mondayOffset)
   presets.push({ id: 'monday', label: 'Montag 08:00', iso: iso(at(monday, 8)) })
   return presets
 }

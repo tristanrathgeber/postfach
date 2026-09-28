@@ -59,3 +59,7 @@ steht, wird bevorzugt angefasst.
 - Protokolldatei, Diagnose-Endpunkt, Fehlerfenster beim Start
 - Nutzerdaten liegen außerhalb des Repos
 - CI: Linting, macOS-Build mit Rauchtest, CodeQL, Dependabot, Doku-Prüfung
+- Fix: DPD-Sendungsnummern wurden fälschlich als Hermes erkannt und
+  verlinkten auf die falsche Tracking-Seite (`extract.py`, Musterüberschneidung)
+- Fix: „Später senden"/Snooze schlugen an Sonntagen „Morgen" und „Montag" als
+  zwei Vorschläge vor, die auf denselben Zeitpunkt zeigten (`lib/times.ts`)

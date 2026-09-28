@@ -98,6 +98,15 @@ def test_extract_tracking_number_with_carrier_link():
     assert track["url"].startswith("https://") and "1Z999AA10123456784" in track["url"]
 
 
+def test_extract_tracking_number_dpd_not_misclassified_as_hermes():
+    # 01234567890123 passt sowohl auf das DPD- (0 + 13 Ziffern) als auch auf
+    # das Hermes-Muster (14 beliebige Ziffern) — DPD ist die spezifischere
+    # Regel und muss gewinnen, sonst zeigt der Chip auf die falsche Tracking-Seite.
+    ents = extract_entities("Deine DPD-Sendung 01234567890123 ist unterwegs.")
+    track = next(e for e in ents if e["kind"] == "tracking")
+    assert track["url"].startswith("https://tracking.dpd.de/")
+
+
 def test_extract_dedupes_and_caps():
     text = "Betrag 10,00 € " * 100
     ents = extract_entities(text)
